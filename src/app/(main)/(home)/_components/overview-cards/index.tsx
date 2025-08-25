@@ -28,13 +28,14 @@ export async function OverviewCardsGroup() {
         <div className="w-full">
           <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
             {/* Plane Image */}
-            <div className="w-full xl:w-1/5 flex justify-center">
+            <div className="hidden md:flex w-full xl:w-1/5 justify-center">
               <img
                 src="/images/cover/asidePlane.png"
                 alt="Plane"
                 className="w-full max-w-[180px] h-auto object-contain rounded-2xl"
               />
             </div>
+
 
             {/* Hero Asside */}
             <div className="w-full xl:flex-1">
@@ -46,25 +47,33 @@ export async function OverviewCardsGroup() {
 
       {/* Summary Circular Cards Row */}
       <div className="mt-8 w-full">
-        <div className="flex flex-wrap justify-center gap-14">
+        <div className="flex md:flex-wrap flex-nowrap justify-start md:justify-center gap-6 overflow-x-auto scrollbar-hide px-2">
           {summaryData.map((item, idx) => (
             <Link
               href={item.link}
               key={idx}
-              className={`relative w-40 h-40 flex flex-col items-center justify-center border-8 ${item.border} bg-white rounded-full shadow-sm hover:scale-105 transition-all duration-300 ease-in-out group cursor-pointer`}
+              className={`relative 
+                w-24 h-24 sm:w-32 sm:h-32 md:w-40 md:h-40 
+                flex-shrink-0 flex flex-col items-center justify-center 
+                border-4 sm:border-6 md:border-8 
+                ${item.border} bg-white rounded-full shadow-sm 
+                hover:scale-105 transition-all duration-300 ease-in-out 
+                group cursor-pointer`}
             >
-              <div className="w-16 h-16 rounded-full overflow-hidden flex items-center justify-center bg-gray-100 shadow mb-2">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 rounded-full overflow-hidden flex items-center justify-center bg-gray-100 shadow mb-1 sm:mb-2">
                 <img
                   src={item.imagePath}
                   alt={item.label}
                   className="w-full h-full object-contain"
                 />
               </div>
-              <h3 className="text-sm text-gray-700 font-medium">{item.label}</h3>
-              <div className="text-3xl font-bold text-[#004051] mt-1 group-hover:scale-110 transition-all duration-300">
+              <h3 className="text-[10px] sm:text-xs md:text-sm text-gray-700 font-medium">
+                {item.label}
+              </h3>
+              <div className="text-lg sm:text-2xl md:text-3xl font-bold text-[#004051] mt-0.5 sm:mt-1 group-hover:scale-110 transition-all duration-300">
                 {item.value}
               </div>
-              <span className="absolute w-full h-full rounded-full border-4 animate-spin-slow border-dashed border-opacity-20 border-[#004051]"></span>
+              <span className="absolute w-full h-full rounded-full border-2 sm:border-3 md:border-4 animate-spin-slow border-dashed border-opacity-20 border-[#004051]"></span>
             </Link>
           ))}
         </div>

@@ -520,102 +520,101 @@ export default function LogSection({
                 </div>
               )}
               <div className="w-full flex flex-col md:flex-row items-start gap-4">
-                <div className="flex flex-col min-w-[100px] pt-2 md:pt-7">
-                  <h2 className="text-md font-bold text-gray-700 mb-2">COMPONENTS :</h2>
+                <div className="flex flex-col min-w-[110px] pt-2 md:pt-7">
+                  <h2 className="text-md font-bold text-gray-700 mb-2">COMPONENTS: </h2>
                 </div>
-                <div className="flex-1 overflow-x-auto">
-                  <div className="flex md:flex-row flex-col md:items-start items-stretch gap-4">
-                    <div className="overflow-x-auto w-full min-w-[800px]">
-                      <table className="min-w-[800px] w-full table-fixed border border-gray-300 text-sm">
-                        <thead>
-                          <tr className="bg-[#004051] text-white">
-                            <th className="p-2 border border-gray-300">PART NO</th>
-                            <th className="p-2 border border-gray-300">SERIAL ON</th>
-                            <th className="p-2 border border-gray-300">PART OFF</th>
-                            <th className="p-2 border border-gray-300">SERIAL OFF</th>
-                            <th className="p-2 border border-gray-300">GRN</th>
-                            <th className="p-2 border border-gray-300">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {entry.componentRows.map((row, rowIndex) => (
-                            <tr key={rowIndex} className="bg-white hover:bg-gray-50">
-                              <td className="p-2 border border-gray-300">
-                                <input
-                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring focus:ring-[#004051]/30"
-                                  type="text"
-                                  placeholder="Type here..."
-                                  value={row.partNo}
-                                  onChange={(e) => handleComponentRowChange(index, rowIndex, 'partNo', e.target.value)}
-                                />
-                              </td>
-                              <td className="p-2 border border-gray-300">
-                                <input
-                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring focus:ring-[#004051]/30"
-                                  type="text"
-                                  placeholder="Type here..."
-                                  value={row.serialOn}
-                                  onChange={(e) => handleComponentRowChange(index, rowIndex, 'serialOn', e.target.value)}
-                                />
-                              </td>
-                              <td className="p-2 border border-gray-300">
-                                <input
-                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring focus:ring-[#004051]/30"
-                                  type="text"
-                                  placeholder="Type here..."
-                                  value={row.partOff}
-                                  onChange={(e) => handleComponentRowChange(index, rowIndex, 'partOff', e.target.value)}
-                                />
-                              </td>
-                              <td className="p-2 border border-gray-300">
-                                <input
-                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring focus:ring-[#004051]/30"
-                                  type="text"
-                                  placeholder="Type here..."
-                                  value={row.serialOff}
-                                  onChange={(e) => handleComponentRowChange(index, rowIndex, 'serialOff', e.target.value)}
-                                />
-                              </td>
-                              <td className="p-2 border border-gray-300">
-                                <input
-                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring focus:ring-[#004051]/30"
-                                  type="text"
-                                  placeholder="Type here..."
-                                  value={row.grn}
-                                  onChange={(e) => handleComponentRowChange(index, rowIndex, 'grn', e.target.value)}
-                                />
-                              </td>
-                              <td className="p-2 border border-gray-300 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => removeComponentRow(index, rowIndex)}
-                                  className="bg-red-600 text-white px-3 py-1 text-xs rounded-md hover:bg-red-700"
-                                >
-                                  Remove
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="pt-2 md:pt-2 md:min-w-[100px]">
-                      <button
-                        onClick={() => addComponentRow(index)}
-                        type="button"
-                        className="bg-[#004051] text-white text-sm font-medium py-1 px-3 rounded shadow transition w-full md:w-auto hover:bg-[#00363f]"
-                      >
-                        + Add New
-                      </button>
-                      <button
-                        onClick={() => removeLogEntry(index)}
-                        className={`bg-red-600 text-white px-3 py-1 text-sm rounded-md font-medium mt-2 ${isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'}`}
-                        disabled={!!isFullyAuthorized}
-                      >
-                        Remove Log
-                      </button>
-                    </div>
-                  </div>
+
+                {/* 🚀 FIX: force horizontal scroll only for table */}
+                <div className="w-full overflow-x-auto">
+                  <table className="table-auto border border-gray-300 text-sm min-w-[900px]">
+                    <thead>
+                      <tr className="bg-[#004051] text-white">
+                        <th className="p-2 border border-gray-300">PART NO</th>
+                        <th className="p-2 border border-gray-300">SERIAL ON</th>
+                        <th className="p-2 border border-gray-300">PART OFF</th>
+                        <th className="p-2 border border-gray-300">SERIAL OFF</th>
+                        <th className="p-2 border border-gray-300">GRN</th>
+                        <th className="p-2 border border-gray-300">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entry.componentRows.map((row, rowIndex) => (
+                        <tr key={rowIndex} className="bg-white hover:bg-gray-50">
+                          <td className="p-2 border border-gray-300">
+                            <input
+                              className="w-full px-2 py-1 border border-gray-300 rounded focus:ring focus:ring-[#004051]/30"
+                              type="text"
+                              placeholder="Type here..."
+                              value={row.partNo}
+                              onChange={(e) => handleComponentRowChange(index, rowIndex, 'partNo', e.target.value)}
+                            />
+                          </td>
+                          <td className="p-2 border border-gray-300">
+                            <input
+                              className="w-full px-2 py-1 border border-gray-300 rounded focus:ring focus:ring-[#004051]/30"
+                              type="text"
+                              placeholder="Type here..."
+                              value={row.serialOn}
+                              onChange={(e) => handleComponentRowChange(index, rowIndex, 'serialOn', e.target.value)}
+                            />
+                          </td>
+                          <td className="p-2 border border-gray-300">
+                            <input
+                              className="w-full px-2 py-1 border border-gray-300 rounded focus:ring focus:ring-[#004051]/30"
+                              type="text"
+                              placeholder="Type here..."
+                              value={row.partOff}
+                              onChange={(e) => handleComponentRowChange(index, rowIndex, 'partOff', e.target.value)}
+                            />
+                          </td>
+                          <td className="p-2 border border-gray-300">
+                            <input
+                              className="w-full px-2 py-1 border border-gray-300 rounded focus:ring focus:ring-[#004051]/30"
+                              type="text"
+                              placeholder="Type here..."
+                              value={row.serialOff}
+                              onChange={(e) => handleComponentRowChange(index, rowIndex, 'serialOff', e.target.value)}
+                            />
+                          </td>
+                          <td className="p-2 border border-gray-300">
+                            <input
+                              className="w-full px-2 py-1 border border-gray-300 rounded focus:ring focus:ring-[#004051]/30"
+                              type="text"
+                              placeholder="Type here..."
+                              value={row.grn}
+                              onChange={(e) => handleComponentRowChange(index, rowIndex, 'grn', e.target.value)}
+                            />
+                          </td>
+                          <td className="p-2 border border-gray-300 text-center">
+                            <button
+                              type="button"
+                              onClick={() => removeComponentRow(index, rowIndex)}
+                              className="bg-red-600 text-white px-3 py-1 text-xs rounded-md hover:bg-red-700"
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="pt-2 md:pt-2 md:min-w-[100px]">
+                  <button
+                    onClick={() => addComponentRow(index)}
+                    type="button"
+                    className="bg-[#004051] text-white text-sm font-medium py-1 px-3 mr-2 rounded shadow transition w-auto md:w-auto hover:bg-[#00363f]"
+                  >
+                    + Add New
+                  </button>
+                  <button
+                    onClick={() => removeLogEntry(index)}
+                    className={`bg-red-600 text-white px-3 py-1 text-sm rounded-md font-medium mt-2 ${isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'}`}
+                    disabled={!!isFullyAuthorized}
+                  >
+                    Remove Log
+                  </button>
                 </div>
               </div>
             </div>

@@ -168,11 +168,34 @@ export default function NoticesForm() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
+    <div className="min-h-screen bg-gray-100">
       <div className="max-w-6xl mx-auto bg-white border border-gray-200 rounded-xl shadow p-6">
         {/* Enhanced Header */}
+        {/* Header */}
         <header className="border-b-2 border-[#004051] pb-4 mb-6">
-          <div className="flex items-center relative">
+          {/* Mobile/Tablet Layout */}
+          <div className="flex flex-row items-center gap-2 md:hidden">
+            {/* Logo */}
+            <div className="flex-shrink-0">
+              <Image
+                src="/images/logo/Picture1.png"
+                width={150}
+                height={75}
+                className="h-10 sm:h-12 w-auto rounded"
+                alt="Organization logo"
+                role="presentation"
+                quality={100}
+              />
+            </div>
+
+            {/* Heading */}
+            <h1 className="ml-4 text-sm sm:text-lg font-bold text-[#004051] uppercase text-left">
+              Notices to Flight / Maintenance Crew
+            </h1>
+          </div>
+
+          {/* Desktop Layout */}
+          <div className="hidden md:flex items-center relative">
             <div className="mt-2">
               <Image
                 src="/images/logo/Picture1.png"
@@ -185,7 +208,7 @@ export default function NoticesForm() {
               />
             </div>
             <h1 className="absolute left-1/2 transform -translate-x-1/2 text-2xl font-bold text-[#004051] uppercase text-center">
-              Notices to Flight/Maintenance Crew
+              Notices to Flight / Maintenance Crew
             </h1>
           </div>
         </header>
@@ -211,17 +234,21 @@ export default function NoticesForm() {
                 {/* Entered Column */}
                 <td className="p-3 align-top border-t border-gray-300">
                   <div
-                    className={`grid grid-cols-1 gap-y-2 p-3 rounded-md ${
+                    className={`flex flex-col sm:grid sm:grid-cols-2 gap-y-2 gap-x-4 p-3 rounded-md ${
                       authorizedEntries.includes(index) && clearedEntries.includes(index)
                         ? 'bg-[#e0f0ff] text-[#1c3b57]'
                         : 'bg-gray-50 text-gray-600'
                     }`}
                   >
-                    <label className="font-medium text-gray-700">Auth ID :</label>
-                    <div>{entry.enteredAuth || '—'}</div>
+                    <div>
+                      <label className="font-medium text-gray-700">Auth ID: </label>
+                      <div className="break-words">{entry.enteredAuth || '—'}</div>
+                    </div>
 
-                    <label className="font-medium text-gray-700">Auth Name :</label>
-                    <div>{entry.enteredAuthName || '—'}</div>
+                    <div>
+                      <label className="font-medium text-gray-700">Auth Name: </label>
+                      <div className="break-words">{entry.enteredAuthName || '—'}</div>
+                    </div>
 
                     <div className="col-span-2 flex justify-center mt-2">
                       {!authorizedEntries.includes(index) && (
@@ -229,11 +256,12 @@ export default function NoticesForm() {
                           onClick={() => openModal(index, 'entered')}
                           className="bg-[#004051] text-white px-6 py-1.5 text-sm rounded-md hover:bg-[#003040] transition"
                         >
-                          Authorize
+                          Auth
                         </button>
                       )}
                     </div>
                   </div>
+
                 </td>
 
                 {/* Description Column */}
@@ -250,20 +278,24 @@ export default function NoticesForm() {
                   )}
                 </td>
 
-                {/* Cleared Column */}
+               {/* Cleared Column */}
                 <td className="p-3 align-top border-t border-gray-300">
                   <div
-                    className={`grid grid-cols-1 gap-y-2 p-3 rounded-md ${
+                    className={`flex flex-col sm:grid sm:grid-cols-2 gap-y-2 gap-x-4 p-3 rounded-md ${
                       authorizedEntries.includes(index) && clearedEntries.includes(index)
                         ? 'bg-[#e0f0ff] text-[#1c3b57]'
                         : 'bg-gray-50 text-gray-600'
                     }`}
                   >
-                    <label className="font-medium text-gray-700">Auth ID:</label>
-                    <div>{entry.clearedAuth || '—'}</div>
+                    <div>
+                      <label className="font-medium text-gray-700">Auth ID: </label>
+                      <div className="break-words">{entry.clearedAuth || '—'}</div>
+                    </div>
 
-                    <label className="font-medium text-gray-700">Auth Name:</label>
-                    <div>{entry.clearedAuthName || '—'}</div>
+                    <div>
+                      <label className="font-medium text-gray-700">Auth Name: </label>
+                      <div className="break-words">{entry.clearedAuthName || '—'}</div>
+                    </div>
 
                     <div className="col-span-2 flex justify-center mt-2">
                       {!clearedEntries.includes(index) && (
@@ -271,7 +303,7 @@ export default function NoticesForm() {
                           onClick={() => openModal(index, 'cleared')}
                           className="bg-[#004051] text-white px-6 py-1.5 text-sm rounded-md hover:bg-[#003040] transition"
                         >
-                          Authorize
+                          Auth
                         </button>
                       )}
                     </div>
@@ -287,6 +319,7 @@ export default function NoticesForm() {
                     </div>
                   </div>
                 </td>
+
               </tr>
             ))}
           </tbody>
@@ -315,11 +348,11 @@ export default function NoticesForm() {
       </div>
 
       {authModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center items-start pt-10 sm:pt-16 z-50 overflow-y-auto h-screen">
-            <div
-              className="bg-white rounded-lg p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-lg border-t-4 border-yellow-500"
-              style={{ marginTop: '50px', marginBottom: '50px' }}
-            >
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center items-start pt-20 sm:pt-16 z-50 overflow-y-auto h-screen">
+          <div
+            className="bg-white rounded-lg p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-lg border-t-4 border-yellow-500"
+            style={{ marginTop: '100px', marginBottom: '10px', marginLeft: '20px', marginRight: '20px' }}
+          >
             {/* Header */}
             <div className="flex items-center gap-2 mb-4">
               <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -418,7 +451,7 @@ export default function NoticesForm() {
                 onClick={saveAuthorization}
                 className="px-5 py-2 text-sm font-medium bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition"
               >
-                Authorize
+                Auth
               </button> 
             </div> 
           </div>

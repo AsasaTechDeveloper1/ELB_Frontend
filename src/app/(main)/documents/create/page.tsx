@@ -18,16 +18,54 @@ export default function FormElementsPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log({ docName, docType, file, description });
+
+    if (!file) {
+      alert("Please upload a file");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("docName", docName);
+    formData.append("docType", docType);
+    formData.append("description", description);
+    formData.append("file", file); 
+
+    try { 
+      // const res = await fetch("http://localhost:5000/document_create", {
+      //   method: "POST",
+      //   body: formData,
+      // });
+
+      const res = await fetch("https://elb-backend-r8x5.onrender.com/document_create", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      console.log("✅ Upload Response:", data);
+
+      if (res.ok) {
+        alert("Document uploaded successfully!");
+        // Redirect to index page (assuming it's `/documents`)
+        router.push("/documents");
+      } else {
+        alert("Failed: " + (data.error || "Unknown error"));
+      }
+    } catch (error) {
+      console.error("❌ Upload failed:", error);
+      alert("Failed to upload document");
+    }
   };
 
   return (
     <div className="max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
       {/* Header */}
       <div className="bg-[#004051] px-6 py-3 flex justify-between items-center">
-        <h2 className="text-white text-lg font-semibold">📄 Document Upload Portal</h2>
+        <h2 className="text-white text-base sm:text-lg md:text-lg font-semibold">
+          📄 Document Upload Portal
+        </h2>
         <button
           onClick={() => router.back()}
           type="button"

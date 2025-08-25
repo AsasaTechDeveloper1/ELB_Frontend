@@ -21,17 +21,17 @@ export default function HeroAsside() {
 
   return (
     <div className="w-full space-y-4">
-      {/* Info Summary - Left Aligned */}
+      {/* Info Summary - Horizontal scroll on small screens */}
       <div className="rounded-xl bg-white shadow-md border border-gray-200 p-4 md:p-4">
-        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-y-3 gap-x-6">
+        <div className="flex gap-3 overflow-x-auto no-scrollbar">
           {infoItems.map((item, index) => (
             <div
               key={index}
-              className="flex items-center gap-5 hover:bg-gray-50 px-2 py-1 rounded transition"
+              className="flex items-center gap-2 hover:bg-gray-50 px-3 py-2 rounded-lg transition shrink-0"
             >
               <div className="text-blue-600 text-base">{item.icon}</div>
               <div className="leading-tight">
-                <p className="text-sm font-medium text-gray-500">{item.label}</p>
+                <p className="text-[11px] font-medium text-gray-500">{item.label}</p>
                 <p className="text-sm font-semibold text-gray-800">{item.value}</p>
               </div>
             </div>
