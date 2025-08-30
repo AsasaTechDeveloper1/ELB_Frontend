@@ -10,7 +10,7 @@ import { useRef } from 'react';
 interface NoticeEntry {
   groupNo: number;
   enteredSign: string;
-  enteredAuth: string;
+  enteredAuth: string; 
   enteredAuthName: string;
   enteredDate: string;
   expDate: string;
@@ -213,117 +213,120 @@ export default function NoticesForm() {
           </div>
         </header>
 
-        <table className="w-full text-sm rounded-md overflow-hidden border border-gray-200 shadow-sm">
-          <thead>
-            <tr className="bg-[#004051] text-white">
-              <th className="p-3 w-1/4 text-left">Entered</th>
-              <th className="p-3 w-2/4 text-left">Description</th>
-              <th className="p-3 w-1/4 text-left">Cleared</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry, index) => (
-              <tr
-                key={`entry-${index}`}
-                className={`border-t ${
-                  authorizedEntries.includes(index) && clearedEntries.includes(index)
-                    ? 'bg-[#e0f0ff] text-[#1c3b57]'
-                    : 'bg-white'
-                }`}
-              >
-                {/* Entered Column */}
-                <td className="p-3 align-top border-t border-gray-300">
-                  <div
-                    className={`flex flex-col sm:grid sm:grid-cols-2 gap-y-2 gap-x-4 p-3 rounded-md ${
-                      authorizedEntries.includes(index) && clearedEntries.includes(index)
-                        ? 'bg-[#e0f0ff] text-[#1c3b57]'
-                        : 'bg-gray-50 text-gray-600'
-                    }`}
-                  >
-                    <div>
-                      <label className="font-medium text-gray-700">Auth ID: </label>
-                      <div className="break-words">{entry.enteredAuth || '—'}</div>
-                    </div>
-
-                    <div>
-                      <label className="font-medium text-gray-700">Auth Name: </label>
-                      <div className="break-words">{entry.enteredAuthName || '—'}</div>
-                    </div>
-
-                    <div className="col-span-2 flex justify-center mt-2">
-                      {!authorizedEntries.includes(index) && (
-                        <button
-                          onClick={() => openModal(index, 'entered')}
-                          className="bg-[#004051] text-white px-6 py-1.5 text-sm rounded-md hover:bg-[#003040] transition"
-                        >
-                          Auth
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                </td>
-
-                {/* Description Column */}
-                <td className="p-3 align-top border-t border-gray-300">
-                  <textarea
-                    className="w-full h-34 border border-[#004051] border-2 rounded-md p-2 text-md focus:outline-none focus:ring-2 focus:ring-[#004051]/30"
-                    placeholder="Enter description..."
-                    value={(entry as any)[`description${index + 1}`]}
-                    onChange={(e) => handleDescriptionChange(index, e.target.value)}
-                    disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
-                  />
-                  {descriptionErrors[index] && (
-                    <p className="text-red-600 text-sm mt-1">{descriptionErrors[index]}</p>
-                  )}
-                </td>
-
-               {/* Cleared Column */}
-                <td className="p-3 align-top border-t border-gray-300">
-                  <div
-                    className={`flex flex-col sm:grid sm:grid-cols-2 gap-y-2 gap-x-4 p-3 rounded-md ${
-                      authorizedEntries.includes(index) && clearedEntries.includes(index)
-                        ? 'bg-[#e0f0ff] text-[#1c3b57]'
-                        : 'bg-gray-50 text-gray-600'
-                    }`}
-                  >
-                    <div>
-                      <label className="font-medium text-gray-700">Auth ID: </label>
-                      <div className="break-words">{entry.clearedAuth || '—'}</div>
-                    </div>
-
-                    <div>
-                      <label className="font-medium text-gray-700">Auth Name: </label>
-                      <div className="break-words">{entry.clearedAuthName || '—'}</div>
-                    </div>
-
-                    <div className="col-span-2 flex justify-center mt-2">
-                      {!clearedEntries.includes(index) && (
-                        <button
-                          onClick={() => openModal(index, 'cleared')}
-                          className="bg-[#004051] text-white px-6 py-1.5 text-sm rounded-md hover:bg-[#003040] transition"
-                        >
-                          Auth
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Remove Button */}
-                    <div className="col-span-2 flex justify-center mt-4">
-                      <button
-                        onClick={() => removeEntry(index)}
-                        className="bg-red-600 hover:bg-red-700 text-white px-4 py-1 text-sm rounded-md font-medium"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                </td>
-
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm rounded-md overflow-hidden border border-gray-200 shadow-sm">
+            <thead>
+              <tr className="bg-[#004051] text-white">
+                <th className="p-3 w-1/4 text-left">Entered</th>
+                <th className="p-3 w-2/4 text-left">Description</th>
+                <th className="p-3 w-1/4 text-left">Cleared</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {entries.map((entry, index) => (
+                <tr
+                  key={`entry-${index}`}
+                  className={`border-t ${
+                    authorizedEntries.includes(index) && clearedEntries.includes(index)
+                      ? 'bg-[#e0f0ff] text-[#1c3b57]'
+                      : 'bg-white'
+                  }`}
+                >
+                  {/* Entered Column */}
+                  <td className="p-3 align-top border-t border-gray-300">
+                    <div
+                      className={`flex flex-col sm:grid sm:grid-cols-2 gap-y-2 gap-x-4 p-3 rounded-md ${
+                        authorizedEntries.includes(index) && clearedEntries.includes(index)
+                          ? 'bg-[#e0f0ff] text-[#1c3b57]'
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    >
+                      <div>
+                        <label className="font-medium text-gray-700">Auth ID: </label>
+                        <div className="break-words">{entry.enteredAuth || '—'}</div>
+                      </div>
+
+                      <div>
+                        <label className="font-medium text-gray-700">Auth Name: </label>
+                        <div className="break-words">{entry.enteredAuthName || '—'}</div>
+                      </div>
+
+                      <div className="col-span-2 flex justify-center mt-2">
+                        {!authorizedEntries.includes(index) && (
+                          <button
+                            onClick={() => openModal(index, 'entered')}
+                            className="bg-[#004051] text-white px-6 py-1.5 text-sm rounded-md hover:bg-[#003040] transition"
+                          >
+                            Auth
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                  </td> 
+
+                  {/* Description Column */}
+                  <td className="p-3 align-top border-t border-gray-300">
+                    <textarea
+                      className="w-full min-w-[250px] md:min-w-[400px] h-34 border-2 border-[#004051] rounded-md p-2 text-md focus:outline-none focus:ring-2 focus:ring-[#004051]/30"
+                      placeholder="Enter description..."
+                      value={(entry as any)[`description${index + 1}`]}
+                      onChange={(e) => handleDescriptionChange(index, e.target.value)}
+                      disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                    />
+                    {descriptionErrors[index] && (
+                      <p className="text-red-600 text-sm mt-1">{descriptionErrors[index]}</p>
+                    )}
+                  </td>
+
+
+                {/* Cleared Column */}
+                  <td className="p-3 align-top border-t border-gray-300">
+                    <div
+                      className={`flex flex-col sm:grid sm:grid-cols-2 gap-y-2 gap-x-4 p-3 rounded-md ${
+                        authorizedEntries.includes(index) && clearedEntries.includes(index)
+                          ? 'bg-[#e0f0ff] text-[#1c3b57]'
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    >
+                      <div>
+                        <label className="font-medium text-gray-700">Auth ID: </label>
+                        <div className="break-words">{entry.clearedAuth || '—'}</div>
+                      </div>
+
+                      <div>
+                        <label className="font-medium text-gray-700">Auth Name: </label>
+                        <div className="break-words">{entry.clearedAuthName || '—'}</div>
+                      </div>
+
+                      <div className="col-span-2 flex justify-center mt-2">
+                        {!clearedEntries.includes(index) && (
+                          <button
+                            onClick={() => openModal(index, 'cleared')}
+                            className="bg-[#004051] text-white px-6 py-1.5 text-sm rounded-md hover:bg-[#003040] transition"
+                          >
+                            Auth
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Remove Button */}
+                      <div className="col-span-2 flex justify-center mt-4">
+                        <button
+                          onClick={() => removeEntry(index)}
+                          className="bg-red-600 hover:bg-red-700 text-white px-4 py-1 text-sm rounded-md font-medium"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         <div className="flex justify-center mb-6 mt-4">
           <button

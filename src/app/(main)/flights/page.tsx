@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { MdFlightTakeoff } from 'react-icons/md';
 import {
   Table,
   TableBody,
@@ -10,83 +11,38 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-// import HeroAsside from '../(home)/_components/overview-cards/heroasside';
 
 interface Flight {
-  id: number;
+  id: string;
   regn: string;
-  flightNo: string;
+  fltNo: string;
   from: string;
   to: string;
   takeOffDate: string;
   flightTime: string;
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+
 export default function FlightListPage() {
   const [flights, setFlights] = useState<Flight[]>([]);
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const router = useRouter();
 
+  // 🔹 Fetch flights
   useEffect(() => {
     async function fetchFlights() {
       try {
-        const res = await fetch('/api/flights');
-        
-        if (!res.ok) {
-          throw new Error(`Failed to fetch: ${res.status}`);
-        }
+        const res = await fetch(`${API_BASE}/flights`);
+        if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
 
         const data = await res.json();
-
-        if (Array.isArray(data) && data.length > 0) {
-          setFlights(data);
-        } else {
-          // Fallback dummy data
-          setFlights([
-            {
-              id: 1,
-              regn: 'AP-BGX',
-              flightNo: 'PK301',
-              from: 'Karachi',
-              to: 'Lahore',
-              takeOffDate: '2025-06-01',
-              flightTime: '2h 15m',
-            },
-            {
-              id: 2,
-              regn: 'AP-XYZ',
-              flightNo: 'PK302',
-              from: 'Lahore',
-              to: 'Islamabad',
-              takeOffDate: '2025-06-03',
-              flightTime: '1h 05m',
-            }
-          ]);
-        }
-      } catch (error) {
-        console.error('Failed to fetch flights:', error);
-
-        // Fallback dummy data on error
-        setFlights([
-          {
-            id: 1,
-            regn: 'AP-BGX',
-            flightNo: 'PK301',
-            from: 'Karachi',
-            to: 'Lahore',
-            takeOffDate: '2025-06-01',
-            flightTime: '2h 15m',
-          },
-          {
-            id: 2,
-            regn: 'AP-XYZ',
-            flightNo: 'PK302',
-            from: 'Lahore',
-            to: 'Islamabad',
-            takeOffDate: '2025-06-03',
-            flightTime: '1h 05m',
-          }
-        ]);
+        setFlights(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to fetch flights:", err);
+        setFlights([]);
+        setMessage({ text: "Failed to load flights ❌", type: "error" });
       } finally {
         setLoading(false);
       }
@@ -95,63 +51,119 @@ export default function FlightListPage() {
     fetchFlights();
   }, []);
 
+  // 🔹 Delete handler with inline message
+  async function handleDelete(id: string) {
+    if (!confirm("Are you sure you want to delete this flight?")) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/flights/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+
+      setFlights(prev => prev.filter(f => f.id !== id));
+      // Show inline success message
+      setMessage({ text: 'Flight deleted successfully!', type: 'success' });
+
+      // Hide after 1.5 seconds
+      setTimeout(() => setMessage(null), 1500);
+
+    } catch (err) {
+      console.error("Delete failed:", err);
+      setMessage({ text: 'Error deleting Flight', type: 'error' });
+      setTimeout(() => setMessage(null), 2000);
+    }
+  }
+
+  // 🔹 Navigate to edit form
+  function handleEdit(id: string) {
+    router.push(`/flights/edit/${id}`);
+  }
+
   function handleAddNew() {
     router.push('/flights/create');
   }
 
   return (
-    <>
-      {/* <HeroAsside /> */}
-      <div className="bg-white p-6 shadow rounded-xl">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-gray-800">✈️ Previous Flights</h2>
-          <button
-            onClick={handleAddNew}
-            className="px-4 py-2 bg-[#004051] hover:bg-[#006172] text-white font-medium rounded-md transition"
-          >
-            + Add New Flight
-          </button>
-        </div>
+    <div className="bg-white p-6 shadow rounded-xl">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg sm:text-xl font-semibold text-[#004051] flex items-center gap-2">
+          <MdFlightTakeoff className="text-base sm:text-xl" />
+          <span className="sm:hidden">Flights</span>         {/* mobile */}
+          <span className="hidden sm:inline">Previous Flights</span> {/* desktop */}
+        </h2>
 
-        {loading ? (
-          <p className="text-gray-600">Loading flights...</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[50px] text-center text-gray-700">#</TableHead>
-                  <TableHead className="text-gray-700">REGN</TableHead>
-                  <TableHead className="text-gray-700">FLT No</TableHead>
-                  <TableHead className="text-gray-700">From → To</TableHead>
-                  <TableHead className="text-gray-700">Take Off Date</TableHead>
-                  <TableHead className="text-gray-700">Flight Time</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {flights.length > 0 ? (
-                  flights.map((flight, index) => (
-                    <TableRow key={flight.id} className="text-gray-800">
-                      <TableCell className="text-center">{index + 1}</TableCell>
-                      <TableCell>{flight.regn}</TableCell>
-                      <TableCell>{flight.flightNo}</TableCell>
-                      <TableCell>{flight.from} → {flight.to}</TableCell>
-                      <TableCell>{flight.takeOffDate}</TableCell>
-                      <TableCell>{flight.flightTime}</TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-gray-500 py-4">
-                      No flights found.
+        <button
+          onClick={handleAddNew}
+          className="px-3 py-1 sm:px-4 sm:py-2 bg-[#004051] hover:bg-[#00363f] text-white font-semibold rounded-md transition text-sm sm:text-base flex items-center gap-1"
+        >
+          <MdFlightTakeoff className="text-sm sm:text-base" /> {/* your icon */}
+          <span className="sm:hidden">+ Add</span>            {/* mobile */}
+          <span className="hidden sm:inline">+ Add New Flight</span> {/* desktop */}
+        </button>
+      </div>
+
+      {message && (
+        <div
+          className={`md:col-span-2 mb-4 px-4 py-3 rounded-lg text-base font-semibold text-white shadow-lg transition-all duration-300 ${
+            message.type === 'success' ? 'bg-[#06b6d4]' : 'bg-red-700'
+          }`}
+        > 
+          {message.text}
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-gray-600">Loading flights...</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[50px] text-center text-gray-700">#</TableHead>
+                <TableHead className="text-gray-700">REGN</TableHead>
+                <TableHead className="text-gray-700">FLT No</TableHead>
+                <TableHead className="text-gray-700">From → To</TableHead>
+                <TableHead className="text-gray-700">Take Off Date</TableHead>
+                <TableHead className="text-gray-700">Flight Time</TableHead>
+                <TableHead className="text-gray-700 text-center">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {flights.length > 0 ? (
+                flights.map((flight, index) => (
+                  <TableRow key={flight.id} className="text-gray-800">
+                    <TableCell className="text-center">{index + 1}</TableCell>
+                    <TableCell>{flight.regn}</TableCell>
+                    <TableCell>{flight.fltNo}</TableCell>
+                    <TableCell>{flight.from} → {flight.to}</TableCell>
+                    <TableCell>{flight.takeOffDate}</TableCell>
+                    <TableCell>{flight.flightTime}</TableCell>
+                    <TableCell className="flex gap-2 justify-center">
+                      <button
+                        onClick={() => handleEdit(flight.id)}
+                        className="px-3 py-1 text-sm  bg-[#004051] hover:bg-[#006172]  hover:bg-blue-700 text-white rounded-md"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(flight.id)}
+                        className="px-3 py-1 text-sm bg-red-600 hover:bg-red-700 text-white rounded-md"
+                      >
+                        Delete
+                      </button>
                     </TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </div>
-    </>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-gray-500 py-4">
+                    No flights found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
   );
 }

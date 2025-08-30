@@ -104,7 +104,7 @@ export default function LogSection({
 
   return (
     <div className="bg-gray-100">
-      <div className="max-w-6xl mx-auto bg-white border border-gray-200 rounded-lg shadow p-4">
+      <div className=" mx-auto bg-white border border-gray-200 rounded-lg shadow p-4">
         <header className="border-b-2 border-[#004051] pb-2 mb-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-[#004051] uppercase">Defect & Action Log</h1>
@@ -116,40 +116,42 @@ export default function LogSection({
           return (
             <div
               key={`log-entry-${index}`}
-              className={`border border-gray-300 rounded-lg mb-4 p-6 shadow-sm space-y-4 ${isFullyAuthorized ? 'bg-[#E0F7FA]' : 'bg-gray-50'}`}
+              className={`border border-gray-300 rounded-lg mb-6 p-4 sm:p-6 shadow-sm space-y-6 ${isFullyAuthorized ? 'bg-[#E0F7FA]' : 'bg-gray-50'}`}
             >
-              <div className="flex flex-col gap-2 border-b border-gray-200 pb-2">
+              <div className="flex flex-col gap-4 border-b border-gray-200 pb-4">
                 <div className="flex flex-wrap md:flex-nowrap items-start gap-4">
-                  <div className="flex flex-col flex-1 gap-2">
+                  <div className="flex flex-col flex-1 gap-4">
                     <div className="flex flex-wrap md:flex-nowrap items-center gap-4">
-                      <label className="text-md font-medium text-gray-700 w-[75px]">ITEM # {entry.id}.</label>
-                      <div className="flex items-center gap-2 w-full md:w-[240px]">
-                        <label className="text-sm font-medium text-gray-700 w-[60px]">CLASS:</label>
-                        <div className="flex flex-col w-[150px]">
-                          <select
-                            className={`border ${entry.class && !/^(L|P|LI)$/i.test(entry.class) ? 'border-red-500' : 'border-gray-300'} rounded px-3 py-1 text-md focus:ring-2 focus:ring-[#004051]`}
-                            value={entry.class}
-                            onChange={(e) => handleLogInputChange(index, 'class', e.target.value)}
-                            disabled={(Boolean(entry.authenticated) || isFullyAuthorized) as boolean}
-                          >
-                            <option value="">Select Class</option>
-                            <option value="L">Line-based (L)</option>
-                            <option value="P">PIREP (P)</option>
-                            <option value="LI">Info Only (I)</option>
-                          </select>
-                          {entry.class && !/^(L|P|LI)$/i.test(entry.class) && (
-                            <p className="text-red-500 text-xs mt-1">Must be L, P, or LI</p>
-                          )}
+                      <div className="flex flex-row items-center gap-2 w-full sm:w-[270px] max-w-[270px]">
+                        <h1 className="text-xl font-bold text-[#004051] w-[15px]">{entry.id}.</h1>
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-[240px]">
+                          <label className="text-sm font-medium text-gray-700 w-[60px] min-w-[60px]">CLASS:</label>
+                          <div className="flex flex-col w-full sm:w-[350px] max-w-[350px]">
+                            <select
+                              className={`border ${entry.class && !/^(L|P|LI)$/i.test(entry.class) ? 'border-red-500' : 'border-gray-300'} rounded px-3 py-2 text-base focus:ring-2 focus:ring-[#004051]`}
+                              value={entry.class}
+                              onChange={(e) => handleLogInputChange(index, 'class', e.target.value)}
+                              disabled={(Boolean(entry.authenticated) || isFullyAuthorized) as boolean}
+                            >
+                              <option value="">Select Class</option>
+                              <option value="L">Line-based (L)</option>
+                              <option value="P">PIREP (P)</option>
+                              <option value="LI">Info Only (I)</option>
+                            </select>
+                            {entry.class && !/^(L|P|LI)$/i.test(entry.class) && (
+                              <p className="text-red-500 text-xs mt-1">Must be L, P, or LI</p>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 w-full md:w-[280px]">
-                        <label className={`text-sm w-[120px] font-medium ${!entry.raisedBy && showError ? 'text-red-500' : 'text-gray-600'}`}>
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 md:gap-0 w-full md:w-[280px]">
+                        <label className={`text-sm font-medium ${!entry.raisedBy && showError ? 'text-red-500' : 'рики-gray-600'} w-[120px] min-w-[80px]`}>
                           RAISED BY:
                         </label>
-                        <div className="flex flex-col w-full">
+                        <div className="flex flex-col w-[300px]">
                           <input
                             type="text"
-                            className={`w-full border border-gray-300 rounded px-4 py-1 text-md focus:ring-2 focus:ring-[#004051] ${!entry.raisedBy && showError ? 'border-red-500' : 'border-gray-300'}`}
+                            className={`w-full border border-gray-300 rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051] ${!entry.raisedBy && showError ? 'border-red-500' : 'border-gray-300'}`}
                             placeholder="Auth ID / (Staff ID)"
                             value={entry.raisedBy}
                             onChange={(e) => handleLogInputChange(index, 'raisedBy', e.target.value)}
@@ -162,9 +164,9 @@ export default function LogSection({
                       </div>
                       {!entry.authenticated && (
                         <div className="flex items-center w-full md:w-[70px] mt-2 md:mt-0">
-                          {/* <button
+                          <button
                             type="button"
-                            className={`bg-[#004051] text-white px-4 py-1 rounded-md text-sm h-[30px] ${isFullyAuthorized || entry.authenticated ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className="bg-[#004051] text-white px-4 py-2 rounded-md text-sm h-[36px] w-full sm:w-auto"
                             onClick={() => {
                               const raisedBy = entry.raisedBy || '';
                               const trimmed = raisedBy.trim();
@@ -178,58 +180,30 @@ export default function LogSection({
                                 return;
                               }
                               setShowError(false);
-                              openAuthModal('Raised By Auth', index);
+                              const authdate = new Date();
+                              const today = `${String(authdate.getMonth() + 1).padStart(2, '0')}-${String(authdate.getDate()).padStart(2, '0')}-${authdate.getFullYear()}`;
+                              handleAuth(index, today);
                             }}
-                            disabled={(Boolean(entry.authenticated) || isFullyAuthorized) as boolean}
                           >
                             Auth
-                          </button> */}
-                          <button
-                              type="button"
-                              className="bg-[#004051] text-white px-4 py-1 rounded-md text-sm h-[30px]"
-                              onClick={() => {
-                                const raisedBy = entry.raisedBy || '';
-                                const trimmed = raisedBy.trim();
-
-                                // Show error if empty
-                                if (!trimmed) {
-                                  setShowError(true);
-                                  return;
-                                }
-
-                                // Optional: validate format
-                                const valid = /^[A-Za-z0-9\-\/]+$/.test(trimmed);
-                                if (!valid) {
-                                  setShowError(true);
-                                  return;
-                                }
-
-                                // Success case: hide error, set auth
-                                setShowError(false);
-                                const authdate = new Date();
-                                const today = `${String(authdate.getMonth() + 1).padStart(2, '0')}-${String(authdate.getDate()).padStart(2, '0')}-${authdate.getFullYear()}`;
-                                handleAuth(index, today); // ← this sets entry.authenticated = true
-                              }}
-                            >
-                              Auth
-                            </button>
+                          </button>
                         </div>
                       )}
-                      <div className="font-medium text-gray-700 md:w-[200px] w-full">
+                      <div className="font-medium text-gray-700 w-full md:w-[200px]">
                         RAISED BY: <span className="font-medium text-gray-800">{entry.authenticated && entry.raisedBy ? entry.raisedBy : '—'}</span>
                       </div>
-                      <div className="font-medium text-gray-700">
+                      <div className="font-medium text-gray-700 w-full md:w-auto">
                         RAISED ON: <span className="font-medium text-gray-800">{entry.authenticated && entry.date ? new Date(entry.date).toLocaleDateString() : '—'}</span>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="w-full mt-2">
-                  <label className="text-sm font-medium text-gray-600">DEFECT DETAILS :</label>
+                  <label className="text-sm font-medium text-gray-600">DEFECT DETAILS:</label>
                   <textarea
                     placeholder="Details..."
-                    rows={2}
-                    className={`w-full border ${entry.defectDetails && !/.+/.test(entry.defectDetails) ? 'border-red-500' : 'border-gray-300'} rounded px-4 py-1 text-md focus:ring-2 focus:ring-[#004051] resize-none overflow-hidden mt-2`}
+                    rows={3}
+                    className={`w-full border ${entry.defectDetails && !/.+/.test(entry.defectDetails) ? 'border-red-500' : 'border-gray-300'} rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051] resize-none overflow-hidden mt-2`}
                     value={entry.defectDetails}
                     onChange={(e) => {
                       handleLogInputChange(index, 'defectDetails', e.target.value);
@@ -240,81 +214,82 @@ export default function LogSection({
                   />
                 </div>
               </div>
-              <div className="flex flex-wrap md:flex-nowrap items-start gap-4 border-b border-gray-200 pb-4">
+              <div className="flex flex-col md:flex-row flex-wrap md:flex-nowrap items-start gap-4 border-b border-gray-200 pb-4">
                 <div className="flex flex-wrap md:flex-nowrap gap-4 flex-1 items-end">
-                  <div className="flex items-center gap-2 w-full md:w-[280px]">
-                    <label className="text-sm font-medium text-gray-700 w-[40px]">ATA:</label>
-                    <div className="flex flex-col w-full">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-[280px]">
+                    <label className="text-sm font-medium text-gray-700 w-[40px] min-w-[40px]">ATA:</label>
+                    <div className="flex flex-col w-full md:w-[200px]">
                       <input
                         type="text"
                         placeholder="Enter ATA code..."
-                        className="w-full border border-gray-300 rounded px-4 py-1 text-md focus:ring-2 focus:ring-[#004051]"
+                        className="w-full border border-gray-300 rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051]"
                         value={entry.mmsgFc}
                         onChange={(e) => handleLogInputChange(index, 'mmsgFc', e.target.value)}
                         disabled={!!isFullyAuthorized}
                       />
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 w-full md:w-[320px]">
-                    <label className="text-sm font-medium text-gray-700 w-[130px]">MMSG / FC:</label>
-                    <div className="flex flex-col w-full">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-[320px]">
+                    <label className="text-sm font-medium text-gray-700 w-[80px] min-w-[80px]">MMSG / FC:</label>
+                    <div className="flex flex-col w-full md:w-[200px]">
                       <input
                         type="text"
                         placeholder="Enter MMSG / FC..."
-                        className="w-full border border-gray-300 rounded px-4 py-1 text-md focus:ring-2 focus:ring-[#004051]"
+                        className="w-full border border-gray-300 rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051]"
                         value={entry.mmsgFc}
                         onChange={(e) => handleLogInputChange(index, 'mmsgFc', e.target.value)}
                         disabled={!!isFullyAuthorized}
                       />
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 py-2 min-w-[100px]">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 border border-gray-300 focus:ring-2 focus:ring-[#004051]"
-                      checked={entry.sdr}
-                      onChange={(e) => handleLogInputChange(index, 'sdr', e.target.checked)}
-                      disabled={!!isFullyAuthorized}
-                    />
-                    <label className="text-sm font-medium text-gray-600">SDR</label>
-                  </div>
-                  <div className="flex items-center gap-2 py-2 min-w-[100px]">
-                    <input
-                      type="checkbox"
-                      checked={entry.ddChecked}
-                      onChange={(e) => handleLogInputChange(index, 'ddChecked', e.target.checked)}
-                      className="h-4 w-4 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
-                      disabled={!!isFullyAuthorized}
-                    />
-                    <label className="text-sm font-medium text-gray-600">DD</label>
-                  </div>
-                  <div className="flex items-center gap-2 py-2 min-w-[100px]">
-                    <input
-                      type="checkbox"
-                      checked={entry.indInspChecked}
-                      onChange={(e) => handleLogInputChange(index, 'indInspChecked', e.target.checked)}
-                      className="h-4 w-4 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
-                      disabled={!!isFullyAuthorized}
-                    />
-                    <label className="text-sm font-medium text-gray-600">IND INSP</label>
+                  <div className="flex flex-row flex-nowrap items-center gap-3 w-full overflow-x-auto px-2">
+                    <div className="flex items-center gap-2 py-2 min-w-[80px]">
+                      <input
+                        type="checkbox"
+                        className="h-5 w-5 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
+                        checked={entry.sdr}
+                        onChange={(e) => handleLogInputChange(index, 'sdr', e.target.checked)}
+                        disabled={!!isFullyAuthorized}
+                      />
+                      <label className="text-sm font-medium text-gray-600">SDR</label>
+                    </div>
+                    <div className="flex items-center gap-2 py-2 min-w-[80px]">
+                      <input
+                        type="checkbox"
+                        checked={entry.ddChecked}
+                        onChange={(e) => handleLogInputChange(index, 'ddChecked', e.target.checked)}
+                        className="h-5 w-5 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
+                        disabled={!!isFullyAuthorized}
+                      />
+                      <label className="text-sm font-medium text-gray-600">DD</label>
+                    </div>
+                    <div className="flex items-center gap-2 py-2 min-w-[80px]">
+                      <input
+                        type="checkbox"
+                        checked={entry.indInspChecked}
+                        onChange={(e) => handleLogInputChange(index, 'indInspChecked', e.target.checked)}
+                        className="h-5 w-5 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
+                        disabled={!!isFullyAuthorized}
+                      />
+                      <label className="text-sm font-medium text-gray-600">IND INSP</label>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="flex flex-wrap md:flex-nowrap gap-4 w-full items-start">
+              <div className="flex flex-col md:flex-row gap-4 w-full items-start">
                 <div className="flex-1 min-w-[280px]">
-                  <label className="text-sm font-medium text-gray-600">ACTION DETAILS: </label>
+                  <label className="text-sm font-medium text-gray-600">ACTION DETAILS:</label>
                   <textarea
                     placeholder="Details..."
-                    rows={2}
+                    rows={3}
                     className={`w-full border ${
                       entry.actionDetails && !/.+/.test(entry.actionDetails) ? 'border-red-500' : 'border-gray-300'
-                    } rounded px-4 py-1 text-md focus:ring-2 focus:ring-[#004051] resize-none overflow-hidden mt-2`}
+                    } rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051] resize-none overflow-hidden mt-2`}
                     value={entry.actionDetails}
                     onChange={(e) => {
                       handleLogInputChange(index, 'actionDetails', e.target.value);
                       e.target.style.height = 'auto';
                       e.target.style.height = `${e.target.scrollHeight}px`;
-                      // Clear description error when action details are updated
                       if (descriptionErrors[index]) {
                         const updatedErrors = [...descriptionErrors];
                         updatedErrors[index] = '';
@@ -327,22 +302,22 @@ export default function LogSection({
                     <p className="text-red-600 text-sm mt-1">{descriptionErrors[index]}</p>
                   )}
                   {entry.shortSignAuthId && (
-                    <div className="mt-2 flex items-center flex-wrap gap-x-4 text-sm">
-                      <div className="font-medium text-gray-700 md:w-[250px] w-full">
+                    <div className="mt-2 flex flex-col sm:flex-row items-start sm:items-center flex-wrap gap-x-4 gap-y-2 text-sm">
+                      <div className="font-medium text-gray-700 w-full md:w-[250px]">
                         SHORT SIGN AUTH ID: <span className="font-medium text-gray-800">{entry.shortSignAuthId}</span>
                       </div>
-                      <div className="font-medium text-gray-700 md:w-[250px] w-full">
+                      <div className="font-medium text-gray-700 w-full md:w-[250px]">
                         SHORT SIGN AUTH NAME: <span className="font-medium text-gray-800">{entry.shortSignAuthName}</span>
                       </div>
                     </div>
                   )}
                 </div>
                 <div className="flex flex-col items-start gap-2 min-w-[160px] pt-[30px]">
-                  <div className="flex gap-2">
+                  <div className="flex flex-row flex-wrap items-center gap-2 w-full overflow-x-auto px-2">
                     {!entry.shortSignAuthId ? (
                       <button
                         type="button"
-                        className={`bg-[#004051] text-white px-4 py-1 rounded-md text-sm ${isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : ''} min-w-[120px]`}
                         onClick={() => {
                           if (!entry.actionDetails || entry.actionDetails.trim() === '') {
                             const updatedErrors = [...descriptionErrors];
@@ -360,7 +335,7 @@ export default function LogSection({
                     {!entry.actionAuthId ? (
                       <button
                         type="button"
-                        className={`bg-[#004051] text-white px-4 py-1 rounded-md text-sm ${!entry.shortSignAuthId || isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${!entry.shortSignAuthId || isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : ''} min-w-[120px]`}
                         onClick={() => {
                           if (!entry.actionDetails || entry.actionDetails.trim() === '') {
                             const updatedErrors = [...descriptionErrors];
@@ -375,11 +350,11 @@ export default function LogSection({
                         Auth
                       </button>
                     ) : (
-                      <div>
-                        <div className="font-medium text-gray-700 md:w-[200px] w-full">
+                      <div className="flex flex-row flex-wrap items-center gap-2 w-full min-w-[120px]">
+                        <div className="font-medium text-gray-700 min-w-[100px]">
                           AUTH ID: <span className="font-medium text-gray-800">{entry.actionAuthId}</span>
                         </div>
-                        <div className="font-medium text-gray-700 md:w-[200px] w-full">
+                        <div className="font-medium text-gray-700 min-w-[100px]">
                           AUTH NAME: <span className="font-medium text-gray-800">{entry.actionAuthName}</span>
                         </div>
                       </div>
@@ -389,7 +364,7 @@ export default function LogSection({
               </div>
               <div className="border-b border-gray-300 mb-4"></div>
               {entry.ddChecked && (
-                <div className="flex flex-wrap gap-4 flex-1 justify-start items-end border-b border-gray-300 mb-4 pb-4">
+                <div className="flex flex-wrap gap-4 flex-1 justify-start items-end border-b border-gray-300 mb-4 pb-4 ">
                   {[
                     {
                       label: 'DD Action',
@@ -442,7 +417,7 @@ export default function LogSection({
                   ].map((field, i) => (
                     <div
                       key={i}
-                      className="flex flex-row items-center gap-2"
+                      className="flex flex-row items-center gap-2 "
                       style={{ width: field.type === 'select' ? '195px' : '195px' }} // manual width here
                     >
                       <label className="text-sm font-medium text-gray-600 whitespace-nowrap">
@@ -453,7 +428,7 @@ export default function LogSection({
                         <select
                           className={`w-full border ${
                             field.invalid ? 'border-red-500' : 'border-gray-300'
-                          } rounded px-2 py-1 text-sm focus:ring-2 focus:ring-[#004051]`}
+                          } rounded px-2 py-2 text-sm focus:ring-2 focus:ring-[#004051]`}
                           value={field.value}
                           onChange={(e) =>
                             handleLogInputChange(
@@ -477,7 +452,7 @@ export default function LogSection({
                             field.value && field.pattern && !field.pattern.test(field.value)
                               ? 'border-red-500'
                               : 'border-gray-300'
-                          } rounded px-2 py-1 text-sm focus:ring-2 focus:ring-[#004051]`}
+                          } rounded px-2 py-2 text-sm focus:ring-2 focus:ring-[#004051]`}
                           value={field.value}
                           onChange={(e) =>
                             handleLogInputChange(
@@ -489,30 +464,20 @@ export default function LogSection({
                           disabled={!!isFullyAuthorized}
                         />
                       )}
-
-                      {/* {field.error && field.invalid && (
-                        <p className="text-red-500 text-xs mt-1">{field.error}</p>
-                      )}
-                      {field.error &&
-                        field.pattern &&
-                        field.value &&
-                        !field.pattern.test(field.value) && (
-                          <p className="text-red-500 text-xs mt-1">{field.error}</p>
-                        )} */}
                     </div>
                   ))}
                 </div>
               )}
               {entry.indInspChecked && (
-                <div className="flex flex-col space-y-2 flex-1 border-b border-gray-300 mb-4 pb-4">
+                <div className="flex flex-col space-y-4 flex-1 border-b border-gray-300 mb-4 pb-4">
                   <div className="flex items-center gap-4">
-                    <h2 className="text-sm font-semibold text-gray-700 min-w-[20px]">1.A</h2>
+                    <h2 className="text-sm font-semibold text-gray-700 min-w-[40px]">1.A</h2>
                     <p className="text-sm text-gray-800 flex-1">
                       It is Certified that an independent inspection has been carried out for installation IAW XYZ and is satisfactory.
                     </p>
                   </div>
                   <div className="flex items-center gap-4">
-                    <h2 className="text-sm font-semibold text-gray-700 min-w-[20px]">1.B</h2>
+                    <h2 className="text-sm font-semibold text-gray-700 min-w-[40px]">1.B</h2>
                     <p className="text-sm text-gray-800 flex-1">
                       It is Certified that an independent inspection has been carried out for functional check IAW XYZ and is satisfactory.
                     </p>
@@ -620,7 +585,7 @@ export default function LogSection({
             </div>
           );
         })}
-
+        
         <div className="flex justify-center mb-4">
           <button
             onClick={addNewLogEntry}

@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+// Centralized API base URL from .env
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+
 export default function FormElementsPage() {
   const router = useRouter();
   const [docName, setDocName] = useState('');
@@ -11,16 +14,12 @@ export default function FormElementsPage() {
   const [description, setDescription] = useState(''); 
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setFile(e.target.files[0]);
-    } else {
-      setFile(null);
-    }
+    if (e.target.files && e.target.files.length > 0) setFile(e.target.files[0]);
+    else setFile(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!file) {
       alert("Please upload a file");
       return;
@@ -32,13 +31,8 @@ export default function FormElementsPage() {
     formData.append("description", description);
     formData.append("file", file); 
 
-    try { 
-      // const res = await fetch("http://localhost:5000/document_create", {
-      //   method: "POST",
-      //   body: formData,
-      // });
-
-      const res = await fetch("https://elb-backend-r8x5.onrender.com/document_create", {
+    try {
+      const res = await fetch(`${API_BASE}/document_create`, {
         method: "POST",
         body: formData,
       });
@@ -48,8 +42,7 @@ export default function FormElementsPage() {
 
       if (res.ok) {
         alert("Document uploaded successfully!");
-        // Redirect to index page (assuming it's `/documents`)
-        router.push("/documents");
+        router.push("/documents"); // redirect to documents list
       } else {
         alert("Failed: " + (data.error || "Unknown error"));
       }
@@ -66,11 +59,7 @@ export default function FormElementsPage() {
         <h2 className="text-white text-base sm:text-lg md:text-lg font-semibold">
           📄 Document Upload Portal
         </h2>
-        <button
-          onClick={() => router.back()}
-          type="button"
-          className="text-white text-sm hover:underline"
-        >
+        <button onClick={() => router.back()} type="button" className="text-white text-sm hover:underline">
           ← Back
         </button>
       </div>
@@ -113,12 +102,9 @@ export default function FormElementsPage() {
           </select>
         </div>
 
-        {/* File Upload with Drag & Drop */}
+        {/* File Upload */}
         <div className="col-span-1 md:col-span-2">
-          <label className="text-[15px] font-semibold text-gray-700 mb-2 block">
-            Upload File
-          </label>
-
+          <label className="text-[15px] font-semibold text-gray-700 mb-2 block">Upload File</label>
           <div
             onDrop={(e) => {
               e.preventDefault();
@@ -129,13 +115,7 @@ export default function FormElementsPage() {
             className="flex flex-col items-center justify-center w-full border-2 border-dashed border-[#004051] rounded-md p-6 text-center text-sm text-gray-500 bg-[#f9fbfb] hover:bg-[#f1f5f5] cursor-pointer transition"
             onClick={() => document.getElementById('fileUpload')?.click()}
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-8 w-8 mb-2 text-[#004051]"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-2 text-[#004051]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16v-4a4 4 0 118 0v4m-4 4v-4" />
             </svg>
             <p className="text-[#004051] font-medium">Drag & drop file here or click to select</p>
@@ -147,11 +127,7 @@ export default function FormElementsPage() {
             type="file"
             accept=".pdf,.doc,.docx,.jpg,.png"
             className="hidden"
-            onChange={(e) => {
-              if (e.target.files && e.target.files[0]) {
-                setFile(e.target.files[0]);
-              }
-            }}
+            onChange={handleFileChange}
           />
 
           {file && (

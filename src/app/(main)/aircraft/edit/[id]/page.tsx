@@ -1,99 +1,111 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { MdAirplanemodeActive } from 'react-icons/md'; // import aircraft icon
 
 // Centralized API base URL
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
 
-export default function AddAircraftForm() { 
+export default function EditAircraftForm() {
   const router = useRouter();
+  const { id } = useParams(); // Aircraft ID from URL
 
   const [aircraftName, setAircraftName] = useState('');
   const [aircraftType, setAircraftType] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [manufacturer, setManufacturer] = useState('');
-  const [year, setYear] = useState(''); 
+  const [year, setYear] = useState('');
   const [openingFlightHours, setOpeningFlightHours] = useState('');
   const [image, setImage] = useState<File | null>(null);
+  const [existingImageUrl, setExistingImageUrl] = useState('');
   const [description, setDescription] = useState('');
+  const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
 
-  // For inline messages
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Fetch aircraft details
+  useEffect(() => {
+    async function fetchAircraft() {
+      try {
+        if (!id) return;
+
+        const res = await fetch(`${API_BASE}/aircrafts/${id}`);
+        if (!res.ok) throw new Error('Failed to fetch aircraft');
+
+        const data = await res.json();
+        setAircraftName(data.aircraftName || '');
+        setAircraftType(data.aircraftType || '');
+        setRegistrationNumber(data.registrationNumber || '');
+        setManufacturer(data.manufacturer || '');
+        setYear(data.year || '');
+        setOpeningFlightHours(data.openingFlightHours ? data.openingFlightHours.toString() : '');
+        setDescription(data.description || '');
+        setExistingImageUrl(data.imageUrl || '');
+      } catch (err) {
+        console.error(err);
+        setMessage({ text: 'Failed to load aircraft data', type: 'error' });
+        setTimeout(() => router.back(), 1500);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchAircraft();
+  }, [id, router]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setImage(e.target.files[0]);
-    } else {
-      setImage(null);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true); // mark form as submitted
+    setSubmitted(true);
     setMessage(null);
 
-    // Validate required fields
     if (!aircraftName || !aircraftType || !registrationNumber || !manufacturer || !year || !openingFlightHours) {
       setMessage({ text: 'Please fill all required fields.', type: 'error' });
       return;
     }
 
     const formData = new FormData();
-    formData.append("aircraftName", aircraftName);
-    formData.append("aircraftType", aircraftType);
-    formData.append("registrationNumber", registrationNumber);
-    formData.append("manufacturer", manufacturer);
-    formData.append("year", year);
-    formData.append("openingFlightHours", openingFlightHours);
-    formData.append("description", description);
-    if (image) formData.append("image", image);
+    formData.append('aircraftName', aircraftName);
+    formData.append('aircraftType', aircraftType);
+    formData.append('registrationNumber', registrationNumber);
+    formData.append('manufacturer', manufacturer);
+    formData.append('year', year);
+    formData.append('openingFlightHours', openingFlightHours);
+    formData.append('description', description);
+    if (image) formData.append('image', image);
 
     try {
-      const res = await fetch(`${API_BASE}/aircrafts`, {
-        method: "POST",
+      const res = await fetch(`${API_BASE}/aircrafts/${id}`, {
+        method: 'PUT',
         body: formData,
       });
-
       const data = await res.json();
-      console.log("✅ Aircraft Save Response:", data);
 
       if (res.ok) {
-        setMessage({ text: 'Aircraft saved successfully!', type: 'success' });
-        
-        // Reset form fields
-        setAircraftName('');
-        setAircraftType('');
-        setRegistrationNumber('');
-        setManufacturer('');
-        setYear('');
-        setOpeningFlightHours('');
-        setDescription('');
-        setImage(null);
-        setSubmitted(false);
-
-        // Show message briefly, then redirect
-        setTimeout(() => {
-          router.push('/aircraft'); // replace with your aircraft list route
-        }, 1500); // 1.5 seconds
+        setMessage({ text: 'Aircraft updated successfully!', type: 'success' });
+        setTimeout(() => router.push('/aircraft'), 1500);
       } else {
-        setMessage({ text: data.error || 'Failed to save aircraft.', type: 'error' });
+        setMessage({ text: data.error || 'Failed to update aircraft', type: 'error' });
       }
-
     } catch (err) {
-      console.error("❌ Save failed:", err);
-      setMessage({ text: 'Failed to save aircraft.', type: 'error' });
+      console.error('❌ Update failed:', err);
+      setMessage({ text: 'Failed to update aircraft', type: 'error' });
     }
   };
 
-  // Helper function for red border
   const getInputClass = (value: string) =>
-    `w-full bg-white text-gray-900 border rounded-md px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 ${
+    `w-full border rounded-md px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 ${
       submitted && !value ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 focus:ring-[#004051]'
     }`;
+
+  if (loading) return <p className="p-4 text-gray-600">Loading aircraft details...</p>;
 
   return (
     <div className="max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
@@ -101,115 +113,87 @@ export default function AddAircraftForm() {
       <div className="bg-[#004051] px-6 py-3 flex justify-between items-center">
         <h2 className="text-white text-lg font-semibold flex items-center space-x-2">
           <MdAirplanemodeActive className="text-xl" />
-          <span>Add New Aircraft</span>
+          <span>Edit Aircraft</span>
         </h2>
         <button onClick={() => router.back()} type="button" className="text-white text-sm hover:underline">
           ← Back
         </button>
       </div>
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-6 bg-white">
-        {/* Message */}
+      <form onSubmit={handleSubmit} className="p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
         {message && (
           <div
-            className={`
-              md:col-span-2 mb-4 px-4 py-3 rounded-lg text-base font-semibold text-white shadow-lg 
-              transition-all duration-300 ease-in-out
-              ${message.type === 'success' ? 'bg-[#06b6d4]' : 'bg-red-700'}
-            `}
+            className={`md:col-span-2 mb-4 px-4 py-3 rounded-lg text-base font-semibold text-white shadow-lg transition-all duration-300 ease-in-out ${
+              message.type === 'success' ? 'bg-[#06b6d4]' : 'bg-red-700'
+            }`}
           >
             {message.text}
           </div>
         )}
 
-
         {/* Fields */}
         <div>
-          <label htmlFor="aircraftName" className="text-[15px] font-semibold text-gray-700 mb-1 block">
-            Aircraft Name <span className="text-red-500">*</span>
-          </label>
+          <label className="text-[15px] font-semibold text-gray-700 mb-1 block">Aircraft Name</label>
           <input
-            id="aircraftName"
             type="text"
             value={aircraftName}
             onChange={(e) => setAircraftName(e.target.value)}
-            placeholder="Enter aircraft name"
             className={getInputClass(aircraftName)}
+            required
           />
         </div>
-
         <div>
-          <label htmlFor="aircraftType" className="text-[15px] font-semibold text-gray-700 mb-1 block">
-            Aircraft Type <span className="text-red-500">*</span>
-          </label>
+          <label className="text-[15px] font-semibold text-gray-700 mb-1 block">Aircraft Type</label>
           <input
-            id="aircraftType"
             type="text"
             value={aircraftType}
             onChange={(e) => setAircraftType(e.target.value)}
-            placeholder="e.g. Jet, Helicopter, Glider"
             className={getInputClass(aircraftType)}
+            required
           />
         </div>
-
         <div>
-          <label htmlFor="registrationNumber" className="text-[15px] font-semibold text-gray-700 mb-1 block">
-            Registration Number <span className="text-red-500">*</span>
-          </label>
+          <label className="text-[15px] font-semibold text-gray-700 mb-1 block">Registration Number</label>
           <input
-            id="registrationNumber"
             type="text"
             value={registrationNumber}
             onChange={(e) => setRegistrationNumber(e.target.value)}
-            placeholder="Enter registration number"
             className={getInputClass(registrationNumber)}
+            required
           />
         </div>
-
         <div>
-          <label htmlFor="manufacturer" className="text-[15px] font-semibold text-gray-700 mb-1 block">
-            Manufacturer <span className="text-red-500">*</span>
-          </label>
+          <label className="text-[15px] font-semibold text-gray-700 mb-1 block">Manufacturer</label>
           <input
-            id="manufacturer"
             type="text"
             value={manufacturer}
             onChange={(e) => setManufacturer(e.target.value)}
-            placeholder="e.g. Boeing, Airbus"
             className={getInputClass(manufacturer)}
+            required
           />
         </div>
-
         <div>
-          <label htmlFor="year" className="text-[15px] font-semibold text-gray-700 mb-1 block">
-            Year of Manufacture <span className="text-red-500">*</span>
-          </label>
+          <label className="text-[15px] font-semibold text-gray-700 mb-1 block">Year of Manufacture</label>
           <input
-            id="year"
             type="number"
             value={year}
             onChange={(e) => setYear(e.target.value)}
-            placeholder="e.g. 2015"
             className={getInputClass(year)}
+            required
           />
         </div>
-
         <div>
-          <label htmlFor="openingFlightHours" className="text-[15px] font-semibold text-gray-700 mb-1 block">
-            Opening Flight Hours <span className="text-red-500">*</span>
-          </label>
+          <label className="text-[15px] font-semibold text-gray-700 mb-1 block">Opening Flight Hours</label>
           <input
-            id="openingFlightHours"
             type="number"
             value={openingFlightHours}
             onChange={(e) => setOpeningFlightHours(e.target.value)}
-            placeholder="Enter initial flight hours"
             className={getInputClass(openingFlightHours)}
+            required
           />
         </div>
 
-        {/* Image Upload */}
+        {/* Drag & Drop Image Upload */}
         <div className="md:col-span-2">
           <label className="text-[15px] font-semibold text-gray-700 mb-2 block">Upload Aircraft Image</label>
           <div
@@ -225,7 +209,6 @@ export default function AddAircraftForm() {
             <p className="text-[#004051] font-medium">Drag & drop image here or click to select</p>
             <p className="text-xs text-gray-400 mt-1">Supported: JPG, PNG</p>
           </div>
-
           <input
             id="aircraftImage"
             type="file"
@@ -233,36 +216,31 @@ export default function AddAircraftForm() {
             className="hidden"
             onChange={handleImageChange}
           />
-
-          {image && (
-            <p className="text-sm text-gray-600 mt-2">📎 <strong>Selected:</strong> {image.name}</p>
+          {image && <p className="text-sm text-gray-600 mt-2">📎 <strong>Selected:</strong> {image.name}</p>}
+          {!image && existingImageUrl && (
+            <img src={`${API_BASE}${existingImageUrl}`} alt="Aircraft" className="h-16 mt-2 rounded-md" />
           )}
         </div>
 
         {/* Description */}
         <div className="md:col-span-2">
-          <label htmlFor="description" className="text-[15px] font-semibold text-gray-700 mb-1 block">
-            Notes / Description <span className="text-gray-400 font-normal">(Optional)</span>
-          </label>
+          <label className="text-[15px] font-semibold text-gray-700 mb-1 block">Notes / Description</label>
           <textarea
-            id="description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Add any extra details about the aircraft"
             rows={3}
-            className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm resize-none placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#004051]"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#004051]"
           />
         </div>
       </form>
 
-      {/* Footer */}
       <div className="bg-gray-100 px-6 py-3 flex justify-end">
         <button
           type="submit"
           onClick={handleSubmit}
-          className="bg-[#004051] hover:bg-[#00363f] text-white text-sm font-medium px-6 py-2 rounded-md transition"
+          className="bg-[#004051] hover:bg-[#00363f] text-white px-6 py-2 rounded-md"
         >
-          Save Aircraft
+          Update Aircraft
         </button>
       </div>
     </div>
