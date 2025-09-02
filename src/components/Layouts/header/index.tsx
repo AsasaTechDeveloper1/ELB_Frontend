@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSidebarContext } from "../sidebar/sidebar-context";
 import { MenuIcon } from "./icons";
 import { Notification } from "./notification";
+import { HomeButton } from "./home";
 import { ThemeToggleSwitch } from "./theme-toggle";
 import { UserInfo } from "./user-info";
 
@@ -13,7 +14,7 @@ export function Header() {
   const { toggleSidebar, isMobile } = useSidebarContext();
 
   return (
-    <header className="sticky top-0 z-30 border-b border-stroke bg-white px-4 py-5 shadow-1 dark:border-stroke-dark dark:bg-gray-dark md:px-5 2xl:px-10">
+    <header className="sticky top-0 z-30 border-b border-stroke bg-white px-4 py-5 shadow-1 dark:border-stroke-dark dark:bg-gray-dark md:px-5 2xl:px-4">
       <div className="flex items-center justify-between">
         {/* Sidebar toggle */}
         <button
@@ -23,6 +24,8 @@ export function Header() {
           <MenuIcon />
           <span className="sr-only">Toggle Sidebar</span>
         </button>
+
+        
 
         {/* Logo (only mobile) */}
         {isMobile && (
@@ -37,11 +40,14 @@ export function Header() {
           </Link>
         )}
 
+        <HomeButton />
+        
         {/* Right side - notification & profile */}
         <div className="flex flex-1 items-center justify-end gap-2 min-[375px]:gap-4">
           {/* Desktop flight info */}
+          
           <div className="hidden md:block w-full bg-[#004051] shadow-md border border-gray-200 rounded-lg">
-            <div
+            <div 
               className="grid max-w-[970px] mx-auto py-3"
               style={{ gridTemplateColumns: "1fr 1fr 2fr" }}
             >

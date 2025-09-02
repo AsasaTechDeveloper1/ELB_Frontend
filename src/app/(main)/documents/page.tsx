@@ -9,9 +9,10 @@ interface DocumentType {
   docType: string;
   description: string;
   fileName: string;
-  filePath: string;
   fileSize: number;
+  fileUrl: string;   // ✅ this is important
 }
+
 
 // Centralized API base URL
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -24,7 +25,7 @@ export default function FormElementsPage() {
   useEffect(() => { 
     const fetchDocs = async () => {
       try {
-        const res = await fetch(`${API_BASE}/document_create`);
+        const res = await fetch(`${API_BASE}/document_create`); // ✅ keep same path if you mounted it at /document_create
         const data = await res.json();
         setDocuments(data);
         if (data.length > 0) setActiveDoc(data[0]);
@@ -99,8 +100,8 @@ export default function FormElementsPage() {
         </div>
 
         {/* Content Area */}
-        {activeDoc ? (
-          <div className="col-span-12 md:col-span-9">
+        {activeDoc ? ( 
+          <div className="col-span-12 md:col-span-9"> 
             <div className="p-6 bg-white rounded-lg shadow-md border border-gray-200">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-[#004051]">{activeDoc.docName}</h2>
@@ -120,17 +121,17 @@ export default function FormElementsPage() {
               {/* File Preview */}
               <div className="mt-4 border rounded p-2 bg-gray-50">
                 {/\.(jpg|jpeg|png|gif|webp)$/i.test(activeDoc.fileName) ? (
-                  <img src={getFileUrl(activeDoc.filePath)} alt={activeDoc.docName} className="max-w-full h-auto rounded shadow" />
+                  <img src={activeDoc.fileUrl} alt={activeDoc.docName} className="max-w-full h-auto rounded shadow" />
                 ) : activeDoc.fileName.toLowerCase().endsWith(".pdf") ? (
-                  <iframe src={getFileUrl(activeDoc.filePath)} className="w-full h-[500px] border rounded"></iframe>
+                  <iframe src={activeDoc.fileUrl} className="w-full h-[500px] border rounded"></iframe>
                 ) : /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(activeDoc.fileName) ? (
-                  <iframe src={`https://docs.google.com/gview?url=${getFileUrl(activeDoc.filePath)}&embedded=true`} className="w-full h-[500px] border rounded"></iframe>
+                  <iframe src={`https://docs.google.com/gview?url=${activeDoc.fileUrl}&embedded=true`} className="w-full h-[500px] border rounded"></iframe>
                 ) : activeDoc.fileName.toLowerCase().endsWith(".txt") ? (
-                  <iframe src={getFileUrl(activeDoc.filePath)} className="w-full h-[500px] border rounded bg-white"></iframe>
+                  <iframe src={activeDoc.fileUrl} className="w-full h-[500px] border rounded bg-white"></iframe>
                 ) : (
                   <div className="text-center p-4">
                     <p className="mb-2">Preview not available for this file type.</p>
-                    <a href={getFileUrl(activeDoc.filePath)} download className="text-blue-600 underline">
+                    <a href={activeDoc.fileUrl} download className="text-blue-600 underline">
                       Download {activeDoc.docName}
                     </a>
                   </div>
@@ -138,7 +139,7 @@ export default function FormElementsPage() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : ( 
           <div className="col-span-12 md:col-span-12">
             <p className='text-center'>No documents found.</p>
           </div>

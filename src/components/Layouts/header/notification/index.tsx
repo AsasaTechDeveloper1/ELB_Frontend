@@ -39,7 +39,7 @@ const notificationList = [
     subTitle: "Congratulate him",
   },
 ];
-
+ 
 export function Notification() {
   const [isOpen, setIsOpen] = useState(false);
   const [isDotVisible, setIsDotVisible] = useState(true);
