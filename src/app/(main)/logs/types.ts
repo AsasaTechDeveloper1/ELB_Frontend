@@ -6,11 +6,13 @@ export interface LogEntry {
   ddDate1: string;
   ddSign1: string;
   ddAuth1: string;
-  id: number;
+  id: number; // Client-side ID for log entry
+  updated_id: string; // Client-side ID for log entry
   class: string;
   raisedBy: string;
-  defectDetails: string;
+  defectDetails: string; 
   mmsgFc: string;
+  ata: string;
   sdr: boolean;
   actionDetails: string;
   ddChecked: boolean;
@@ -25,6 +27,9 @@ export interface LogEntry {
   shortSignAuthName: string;
   actionAuthId: string;
   actionAuthName: string;
+  logItemId?: string;   // Firestore log item ID
+  createdAt?: string;   // ISO date string
+  updatedAt?: string;   // ISO date string
 }
 
 export interface ComponentRow {
@@ -33,6 +38,7 @@ export interface ComponentRow {
   partOff: string;
   serialOff: string;
   grn: string;
+  id?: string; // Firestore component ID
 }
 
 export interface AuthData {

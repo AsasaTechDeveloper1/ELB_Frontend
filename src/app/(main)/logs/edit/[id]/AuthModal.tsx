@@ -3,8 +3,8 @@
 import { useRef } from 'react';
 import SignaturePad from 'react-signature-canvas';
 import type { SignatureCanvas } from 'react-signature-canvas';
-import { AuthData } from './types';
-
+import { AuthData } from '../../types';
+  
 interface AuthModalProps {
   authModal: { type: string; index: number } | null;
   authData: AuthData; 

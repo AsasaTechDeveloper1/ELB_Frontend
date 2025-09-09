@@ -27,6 +27,7 @@ export default function FormElementsPage() {
       try {
         const res = await fetch(`${API_BASE}/document_create`); // ✅ keep same path if you mounted it at /document_create
         const data = await res.json();
+        console.log("Fetched docs:", data);
         setDocuments(data);
         if (data.length > 0) setActiveDoc(data[0]);
       } catch (error) {
