@@ -1,8 +1,8 @@
 'use client';
 
-import router from 'next/router';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { LogEntry, ComponentRow } from '../types';
-import { useRouter } from "next/navigation"; // ✅ already imported
 
 interface LogSectionProps {
   logEntries: LogEntry[];
@@ -13,10 +13,12 @@ interface LogSectionProps {
   setShowError: React.Dispatch<React.SetStateAction<boolean>>;
   openAuthModal: (type: string, index: number) => void;
 }
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+
 const initialLogEntry: LogEntry = {
   id: 0,
-  updated_id: "",
+  updated_id: '',
   class: '',
   raisedBy: '',
   defectDetails: '',
@@ -43,10 +45,9 @@ const initialLogEntry: LogEntry = {
   ddDate1: '',
   ddSign1: '',
   ddAuth1: '',
-};  
+};
 
 export default function LogSection({
-  
   logEntries,
   setLogEntries,
   descriptionErrors,
@@ -56,6 +57,55 @@ export default function LogSection({
   openAuthModal,
 }: LogSectionProps) {
   const router = useRouter();
+  const [logPageNo, setLogPageNo] = useState<string>(''); // Initial default, will be updated
+
+  // Fetch existing logs to determine the next log page number
+  const fetchLogs = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/logs`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        // Extract logPageNo from each log
+        const logPageNumbers = data.map((log: { logPageNo: string }) => log.logPageNo);
+        // Generate the next log page number
+        const nextLogPageNo = generateNextLogPageNo(logPageNumbers);
+        setLogPageNo(nextLogPageNo);
+      } else {
+        console.error('Failed to fetch logs:', data.error);
+      }
+    } catch (err: any) {
+      console.error('Error fetching logs:', err.message);
+    }
+  };
+
+  // Generate the next log page number based on existing ones
+  const generateNextLogPageNo = (existingPageNos: string[]): string => {
+    if (!existingPageNos || existingPageNos.length === 0) {
+      return 'LOG-00001'; // Default if no logs exist
+    }
+
+    // Extract numeric parts and find the maximum
+    const numbers = existingPageNos
+      .map((pageNo) => {
+        const match = pageNo.match(/^LOG-(\d+)$/);
+        return match ? parseInt(match[1], 10) : 0;
+      })
+      .filter((num) => !isNaN(num));
+
+    const maxNumber = numbers.length > 0 ? Math.max(...numbers) : 0;
+    const nextNumber = maxNumber + 1;
+    // Format as LOG-XXXXX (e.g., LOG-00002)
+    return `LOG-${nextNumber.toString().padStart(5, '0')}`;
+  };
+
+  // Fetch logs when the component mounts
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
   const handleLogInputChange = (index: number, field: keyof LogEntry, value: string | boolean) => {
     const updatedEntries = [...logEntries];
     updatedEntries[index] = {
@@ -70,59 +120,61 @@ export default function LogSection({
     const errors: string[] = [];
     logEntries.forEach((entry, index) => {
       if (!entry.raisedBy || !entry.actionDetails) {
-        errors[index] = "Raised By and Action Details are required";
+        errors[index] = 'Raised By and Action Details are required';
       } else {
-        errors[index] = "";
+        errors[index] = '';
       }
     });
     setDescriptionErrors(errors);
 
-    if (errors.some((err) => err !== "")) {
+    if (errors.some((err) => err !== '')) {
       setShowError(true);
       return;
     }
 
-    // Send data to backend (insert only)
+    // Prepare payload with logPageNo
+    const payload = {
+      logPageNo, // Include the generated log page number
+      logEntries: logEntries.map((entry) => ({
+        ...entry,
+        id: entry.id || 0, // Ensure id is 0 for new entries
+      })),
+    };
+
+    // Send data to backend
     try {
-      console.log(logEntries, "logEntries");
+      console.log(payload, 'payload');
       const response = await fetch(`${API_BASE}/logs/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ logEntries }), // 🔹 wrap in object
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error("Failed to save logs");
+      if (!response.ok) throw new Error('Failed to save logs');
 
       const data = await response.json();
-      console.log("Saved successfully:", data);
+      console.log('Saved successfully:', data);
 
       setShowError(false);
+      alert('Logs saved successfully!');
+      router.push('/logs');
 
-      // ✅ Redirect after save
-      alert("Logs saved successfully!");
-      router.push("/logs");
-
+      // Refresh log page number after saving
+      await fetchLogs();
     } catch (error) {
-      console.error("Save error:", error);
-      alert("Error saving logs. Please try again.");
+      console.error('Save error:', error);
+      alert('Error saving logs. Please try again.');
     }
   };
-  
-  // const addNewLogEntry = () => { 
-  //   const newId = logEntries.length + 1; 
-  //   setLogEntries([...logEntries, { ...initialLogEntry, id: newId, componentRows: [{ partNo: '', serialOn: '', partOff: '', serialOff: '', grn: '' }] }]);
-  // };
 
-  const addNewLogEntry = () => { 
+  const addNewLogEntry = () => {
     const newEntry = {
       ...initialLogEntry,
-      id: 0, // make sure id is 0 or undefined for new logs
-      componentRows: [{ partNo: '', serialOn: '', partOff: '', serialOff: '', grn: '' }]
+      id: 0,
+      componentRows: [{ partNo: '', serialOn: '', partOff: '', serialOff: '', grn: '' }],
     };
     setLogEntries([...logEntries, newEntry]);
   };
-
-
 
   const removeLogEntry = (index: number) => {
     const updatedEntries = [...logEntries];
@@ -176,17 +228,33 @@ export default function LogSection({
               <div className="flex items-center gap-2">
                 <span className="font-medium text-gray-800 uppercase">
                   LOG PAGE NUMBER:
-                </span> 
+                </span>
                 <span className="text-sm font-semibold text-[#004051] bg-gray-100 border border-[#004051]/30 px-3 py-1 rounded-md shadow-sm uppercase">
-                  LOG-00001
+                  {logPageNo}
                 </span>
               </div>
 
               <button
+                className="bg-[#06b6d4] flex items-center gap-2 text-white font-semibold px-4 py-1 rounded-md shadow-sm hover:bg-[#003340] transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+                Previous
+              </button>
+              <button
+                className="bg-[#06b6d4] flex items-center gap-2 text-white font-semibold px-4 py-1 rounded-md shadow-sm hover:bg-[#003340] transition-colors"
+              >
+                Next
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+              </button>
+              <button
                 className="text-white font-semibold px-4 py-1 rounded-md shadow-sm hover:bg-[#003340] transition-colors"
                 style={{ backgroundColor: '#004051' }}
                 onClick={handleSave}
-              > 
+              >
                 Save
               </button>
             </div>
@@ -230,9 +298,9 @@ export default function LogSection({
                               )}
                             </div>
                           </div>
-                        </div> 
+                        </div>
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 md:gap-0 w-full md:w-[350px]">
-                          <label className={`text-sm font-medium ${!entry.raisedBy && showError ? 'text-red-500' : 'рики-gray-600'} w-[120px] min-w-[80px]`}>
+                          <label className={`text-sm font-medium ${!entry.raisedBy && showError ? 'text-red-500' : 'text-gray-600'} w-[120px] min-w-[80px]`}>
                             RAISED BY:
                           </label>
                           <div className="flex flex-col w-[300px]">
@@ -295,7 +363,7 @@ export default function LogSection({
                           disabled={!!isFullyAuthorized}
                         />
                       </div>
-                    </div> 
+                    </div>
                     <div className="flex flex-row flex-nowrap items-center gap-3 w-full overflow-x-auto px-2">
                       <div className="flex items-center gap-2 py-2 min-w-[80px]">
                         <input
@@ -309,7 +377,7 @@ export default function LogSection({
                       </div>
                       <div className="flex items-center gap-2 py-2 min-w-[80px]">
                         <input
-                          type="checkbox" 
+                          type="checkbox"
                           checked={entry.ddChecked}
                           onChange={(e) => handleLogInputChange(index, 'ddChecked', e.target.checked)}
                           className="h-5 w-5 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
@@ -334,7 +402,7 @@ export default function LogSection({
                   <div className="flex-1 min-w-[280px]">
                     <label className="text-sm font-medium text-gray-600">ACTION DETAILS:</label>
                     <textarea
-                      placeholder="Details..." 
+                      placeholder="Details..."
                       rows={3}
                       className={`w-full border ${
                         entry.actionDetails && !/.+/.test(entry.actionDetails) ? 'border-red-500' : 'border-gray-300'
@@ -349,7 +417,7 @@ export default function LogSection({
                           updatedErrors[index] = '';
                           setDescriptionErrors(updatedErrors);
                         }
-                      }} 
+                      }}
                       disabled={!!isFullyAuthorized}
                     />
                     {descriptionErrors[index] && (
@@ -359,7 +427,7 @@ export default function LogSection({
                       <div className="mt-2 flex flex-col sm:flex-row items-start sm:items-center flex-wrap gap-x-4 gap-y-2 text-sm">
                         <div className="font-medium text-gray-700 w-full md:w-[250px]">
                           SHORT SIGN AUTH ID: <span className="font-medium text-gray-800">{entry.shortSignAuthId}</span>
-                        </div> 
+                        </div>
                         <div className="font-medium text-gray-700 w-full md:w-[250px]">
                           SHORT SIGN AUTH NAME: <span className="font-medium text-gray-800">{entry.shortSignAuthName}</span>
                         </div>
@@ -385,7 +453,7 @@ export default function LogSection({
                         >
                           Short Sign
                         </button>
-                      ) : ""}
+                      ) : ''}
                       {!entry.actionAuthId ? (
                         <button
                           type="button"
@@ -418,7 +486,7 @@ export default function LogSection({
                 </div>
                 <div className="border-b border-gray-300 mb-4"></div>
                 {entry.ddChecked && (
-                  <div className="flex flex-wrap gap-4 flex-1 justify-start items-end border-b border-gray-300 mb-4 pb-4 ">
+                  <div className="flex flex-wrap gap-4 flex-1 justify-start items-end border-b border-gray-300 mb-4 pb-4">
                     {[
                       {
                         label: 'DD Action',
@@ -428,7 +496,7 @@ export default function LogSection({
                         value: entry.ddAction,
                         invalid: entry.ddAction && !['Raised', 'Worked', 'Cleared'].includes(entry.ddAction),
                         error: 'Select a valid DD Action',
-                        placeholder: 'Action'
+                        placeholder: 'Action',
                       },
                       {
                         label: 'DD Type',
@@ -438,7 +506,7 @@ export default function LogSection({
                         value: entry.ddType,
                         invalid: entry.ddType && !['Major', 'Minor'].includes(entry.ddType),
                         error: 'Select a valid DD Type',
-                        placeholder: 'Type'
+                        placeholder: 'Type',
                       },
                       {
                         label: 'No',
@@ -447,7 +515,7 @@ export default function LogSection({
                         value: entry.ddNo,
                         pattern: /^[A-Za-z0-9\-]+$/,
                         error: 'Invalid format',
-                        placeholder: 'Type here...'
+                        placeholder: 'Type here...',
                       },
                       {
                         label: 'Mel / Cdl Ref',
@@ -456,7 +524,7 @@ export default function LogSection({
                         value: entry.melCdlRef,
                         pattern: /^[A-Za-z0-9\-\/]+$/,
                         error: 'Invalid format',
-                        placeholder: 'Type here...'
+                        placeholder: 'Type here...',
                       },
                       {
                         label: 'Cat',
@@ -466,18 +534,17 @@ export default function LogSection({
                         value: entry.cat,
                         invalid: entry.cat && !['Cat A', 'Cat B', 'Cat C', 'Cat D', 'Cat U'].includes(entry.cat),
                         error: 'Select a valid Category',
-                        placeholder: 'Cat'
+                        placeholder: 'Cat',
                       },
                     ].map((field, i) => (
                       <div
                         key={i}
-                        className="flex flex-row items-center gap-2 "
-                        style={{ width: field.type === 'select' ? '195px' : '195px' }} // manual width here
+                        className="flex flex-row items-center gap-2"
+                        style={{ width: field.type === 'select' ? '195px' : '195px' }}
                       >
                         <label className="text-sm font-medium text-gray-600 whitespace-nowrap">
                           {field.label}
                         </label>
-
                         {field.type === 'select' ? (
                           <select
                             className={`w-full border ${
@@ -535,17 +602,15 @@ export default function LogSection({
                       <p className="text-sm text-gray-800 flex-1">
                         It is Certified that an independent inspection has been carried out for functional check IAW XYZ and is satisfactory.
                       </p>
-                    </div> 
+                    </div>
                   </div>
                 )}
-                <div className="w-full flex flex-col md:flex-row items-start gap-4">
-                  <div className="flex flex-col min-w-[110px] pt-2 md:pt-7">
-                    <h2 className="text-md font-bold text-gray-700 mb-2">COMPONENTS: </h2>
-                  </div>
-
-                  {/* 🚀 FIX: force horizontal scroll only for table */}
+                <h2 style={{ margin: 10, padding: 0 }} className="text-md font-bold text-gray-700 py-0">
+                  COMPONENTS:
+                </h2>
+                <div className="w-full flex flex-col md:flex-row items-start gap-4 mt-0" style={{ margin: 0, padding: 0 }}>
                   <div className="w-full overflow-x-auto">
-                    <table className="table-auto border border-gray-300 text-sm min-w-[900px]">
+                    <table className="table-auto border border-gray-300 text-sm">
                       <thead>
                         <tr className="bg-[#004051] text-white">
                           <th className="p-2 border border-gray-300">PART NO</th>
@@ -618,7 +683,6 @@ export default function LogSection({
                       </tbody>
                     </table>
                   </div>
-
                   <div className="pt-2 md:pt-2 md:min-w-[100px]">
                     <button
                       onClick={() => addComponentRow(index)}
@@ -639,16 +703,14 @@ export default function LogSection({
               </div>
             );
           })}
-          
           <div className="flex justify-center mb-4">
             <button
               onClick={addNewLogEntry}
-              className={`bg-[#004051] text-white px-4 py-2 rounded-md font-medium text-sm hover:bg-[#006172]}`}
+              className={`bg-[#004051] text-white px-4 py-2 rounded-md font-medium text-sm hover:bg-[#006172]`}
             >
               + Add New Log
             </button>
           </div>
-
           <div className="bg-[#f0fafa] border border-[#004051] rounded-lg p-3 shadow-sm mb-4">
             <h3 className="text-sm font-semibold text-[#004051] mb-1">📌 Note:</h3>
             <p className="text-md text-gray-800 leading-relaxed">

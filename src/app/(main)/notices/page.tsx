@@ -35,7 +35,7 @@ const initialEntry: NoticeEntry = {
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
-
+ 
 export default function NoticesForm() {
   const sigCanvas = useRef<SignatureCanvas | null>(null);
   const [entries, setEntries] = useState<NoticeEntry[]>([{ ...initialEntry }]);
