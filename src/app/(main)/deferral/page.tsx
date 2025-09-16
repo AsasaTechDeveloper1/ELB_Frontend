@@ -39,6 +39,20 @@ interface DeferralEntry {
 interface LogItem {
   id: string;
   displayNumber: number;
+  defectDetails?: string;
+  actionDetails?: string;
+  raisedBy?: string;
+  ddChecked?: boolean;
+  ddAction?: string;
+  ddType?: string;
+  ddNo?: string;
+  melCdlRef?: string;
+  cat?: string;
+  indInspChecked?: boolean;
+  sdr?: boolean;
+  mmsgFc?: string;
+  ata?: string;
+  components?: any[];
 }
 
 interface Log {
@@ -51,7 +65,7 @@ const initialEntry: DeferralEntry = {
   groupNo: 1,
   defect_reference: {
     dd: null,
-    type_no: null, // Will be auto-generated
+    type_no: null,
     log_page: null,
     log_item_no: null,
     mel_cd_ref: null,
@@ -103,7 +117,7 @@ export default function DeferralsForm() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<Log[]>([]);
-  const [nextTypeNo, setNextTypeNo] = useState<string>('DEF-00001'); // State for next Type/No
+  const [nextTypeNo, setNextTypeNo] = useState<string>('DEF-00001');
 
   // Generate the next Type/No based on existing type_no values
   const generateNextTypeNo = (existingTypeNos: string[]): string => {
@@ -166,7 +180,6 @@ export default function DeferralsForm() {
         setDescriptionErrors(fetchedEntries.map(() => ''));
         setAuthorizedEntries(fetchedEntries.map((_: DeferralEntry, idx: number) => idx).filter((idx: number) => fetchedEntries[idx].enteredAuth));
         setClearedEntries(fetchedEntries.map((_: DeferralEntry, idx: number) => idx).filter((idx: number) => fetchedEntries[idx].clearedAuth));
-        // Extract type_no values and set next Type/No
         const typeNos = data
           .map((item: any) => item.defect_reference?.type_no)
           .filter((typeNo: string | null): typeNo is string => typeNo !== null);
@@ -227,7 +240,6 @@ export default function DeferralsForm() {
           : entry
       )
     );
-    // Clear item_no if log_page changes
     if (section === 'defect_reference' && field === 'log_page') {
       setEntries((prevEntries) =>
         prevEntries.map((entry, i) =>
@@ -257,12 +269,11 @@ export default function DeferralsForm() {
         groupNo: newGroupNo,
         defect_reference: {
           ...initialEntry.defect_reference,
-          type_no: nextTypeNo, // Set auto-generated Type/No
+          type_no: nextTypeNo,
         },
       },
     ]);
     setDescriptionErrors([...descriptionErrors, '']);
-    // Filter out null values and ensure only strings are passed
     const typeNos = entries
       .map((e) => e.defect_reference.type_no)
       .filter((typeNo): typeNo is string => typeNo !== null);
@@ -297,7 +308,113 @@ export default function DeferralsForm() {
     setAuthorizedEntries((prev) => prev.filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
     setClearedEntries((prev) => prev.filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
 
-    await fetchDeferrals(); // Refetch to update nextTypeNo
+    await fetchDeferrals();
+  };
+
+  const handleCopy = async (index: number) => {
+    console.log("Copy action triggered");
+    try {
+      setLoading(true);
+      setError(null);
+
+      const entry = entries[index];
+      const logPageNo = entry.defect_reference.log_page;
+      const logItemId = entry.defect_reference.log_item_no;
+
+      console.log(`Selected Log Page: ${logPageNo}, Log Item No: ${logItemId}`);
+
+      if (!logPageNo) {
+        setError('Log Page No is required in Defect Reference to copy the entry.');
+        return;
+      }
+      if (!logItemId) {
+        setError('Log Item No is required in Defect Reference to copy the entry.');
+        return;
+      }
+
+      const targetLog = logs.find((log) => log.logPageNo === logPageNo);
+      if (!targetLog) {
+        setError(`Log with page number ${logPageNo} not found.`);
+        return;
+      }
+
+      const originalLogItem = targetLog.items.find((item) => item.id === logItemId);
+      if (!originalLogItem) {
+        setError(`Log item with ID ${logItemId} not found in log ${logPageNo}.`);
+        return;
+      }
+
+      const nextDisplayNumber = targetLog.items.length > 0
+        ? Math.max(...targetLog.items.map((item) => item.displayNumber)) + 1
+        : 1;
+
+      const newLogItem: Partial<LogItem> = {
+        id: targetLog.id,
+        displayNumber: nextDisplayNumber,
+        defectDetails: entry.description,
+        actionDetails: originalLogItem.actionDetails || '',
+        raisedBy: originalLogItem.raisedBy || '',
+        ddChecked: true, // Set to true since copying a deferral
+        ddAction: originalLogItem.ddAction || 'Raised (R)',
+        ddType: entry.defect_reference.dd || originalLogItem.ddType || '',
+        ddNo: entry.defect_reference.type_no || '', // Set ddNo to deferral's type_no
+        melCdlRef: entry.defect_reference.mel_cd_ref || originalLogItem.melCdlRef || '',
+        cat: entry.defect_reference.mel_cat || originalLogItem.cat || '',
+        indInspChecked: originalLogItem.indInspChecked || false,
+        sdr: originalLogItem.sdr || false,
+        mmsgFc: originalLogItem.mmsgFc || '',
+        ata: originalLogItem.ata || '',
+        components: originalLogItem.components
+          ? JSON.parse(JSON.stringify(originalLogItem.components))
+          : [],
+      };
+
+      const response = await fetch(`${API_BASE}/logs/${targetLog.id}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          logItem: newLogItem,
+          createdBy: 'system',
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create log item');
+      }
+
+      const newLogItemId = data.savedLogItem?.id;
+      if (!newLogItemId) {
+        throw new Error('Failed to retrieve new log item ID from response');
+      }
+
+      console.log(`New log item created with ID: ${newLogItemId} (Display Number: ${nextDisplayNumber}) in Log: ${targetLog.id}`);
+
+      // Update the deferral's clear_reference with the new log item
+      setEntries((prevEntries) =>
+        prevEntries.map((e, i) =>
+          i === index
+            ? {
+                ...e,
+                clear_reference: {
+                  ...e.clear_reference,
+                  log_page: logPageNo,
+                  log_item_no: newLogItemId,
+                },
+              }
+            : e
+        )
+      );
+
+      await fetchLogs();
+
+      alert('Log item copied and inserted successfully! Clearance Reference updated. ✅');
+    } catch (err: any) {
+      console.error('Copy operation failed:', err);
+      setError(`Error during copy operation: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openModal = (index: number, type: 'entered' | 'cleared') => {
@@ -396,7 +513,7 @@ export default function DeferralsForm() {
       const data = await res.json();
       if (res.ok) {
         alert('Deferrals saved successfully ✅');
-        await fetchDeferrals(); // Refetch to update entries and nextTypeNo
+        await fetchDeferrals();
       } else {
         setError('Error saving deferrals: ' + data.error);
       }
@@ -578,7 +695,6 @@ export default function DeferralsForm() {
                             <option value="B">B</option>
                             <option value="C">C</option>
                             <option value="D">D</option>
-                            <option value="E">E</option>
                             <option value="U">U</option>
                           </select>
                         </div>
@@ -670,6 +786,7 @@ export default function DeferralsForm() {
                           </button>
                         )}
                         <button
+                          onClick={() => handleCopy(index)}
                           className="bg-[#06b6d4] hover:bg-[#06b6d4] text-white px-4 py-1 text-sm rounded-md font-medium"
                         >
                           Copy

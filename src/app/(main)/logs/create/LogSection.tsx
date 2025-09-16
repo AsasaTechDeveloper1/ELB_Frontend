@@ -47,6 +47,50 @@ const initialLogEntry: LogEntry = {
   ddAuth1: '',
 };
 
+// Function to increment type_no (e.g., DEF-00002 -> DEF-00003)
+const incrementTypeNo = (lastTypeNo: string): string => {
+  if (!lastTypeNo || !lastTypeNo.startsWith('DEF-')) {
+    return 'DEF-00001'; // Default if no valid type_no found
+  }
+  const numericPart = parseInt(lastTypeNo.replace('DEF-', ''), 10);
+  if (isNaN(numericPart)) {
+    return 'DEF-00001'; // Fallback if parsing fails
+  }
+  return `DEF-${String(numericPart + 1).padStart(5, '0')}`; // e.g., DEF-00003
+};
+
+// Fetch the latest type_no from deferrals
+const fetchLatestTypeNo = async (): Promise<string> => {
+  try {
+    const res = await fetch(`${API_BASE}/deferrals`);
+    if (!res.ok) throw new Error('Failed to fetch deferrals');
+    const deferrals = await res.json();
+    // Find the highest type_no
+    const latestDeferral = deferrals
+      .filter((d: any) => d.defect_reference?.type_no)
+      .sort((a: any, b: any) =>
+        b.defect_reference.type_no.localeCompare(a.defect_reference.type_no)
+      )[0];
+    return latestDeferral?.defect_reference?.type_no || 'DEF-00000';
+  } catch (error) {
+    console.error('❌ Error fetching deferrals:', error);
+    return 'DEF-00000'; // Fallback
+  }
+};
+
+// Normalize ddType to backend format (e.g., "Major (M)" -> "M")
+const normalizeDdType = (ddType: string): string => {
+  if (ddType === 'Major (M)') return 'M';
+  if (ddType === 'Minor (N)') return 'N';
+  return ddType || 'N'; // Default to 'N' if empty
+};
+
+// Normalize cat to backend format (e.g., "Cat A" -> "A")
+const normalizeMelCat = (cat: string): string => {
+  if (cat.startsWith('Cat ')) return cat.replace('Cat ', '');
+  return cat || ''; // Return as-is if not prefixed with "Cat "
+};
+
 export default function LogSection({
   logEntries,
   setLogEntries,
@@ -106,12 +150,21 @@ export default function LogSection({
     fetchLogs();
   }, []);
 
-  const handleLogInputChange = (index: number, field: keyof LogEntry, value: string | boolean) => {
+  // Handle input changes, including DD checkbox logic
+  const handleLogInputChange = async (index: number, field: keyof LogEntry, value: string | boolean) => {
     const updatedEntries = [...logEntries];
-    updatedEntries[index] = {
-      ...updatedEntries[index],
-      [field]: value,
-    };
+    updatedEntries[index] = { ...updatedEntries[index], [field]: value };
+
+    // If DD checkbox is checked, fetch and increment type_no
+    if (field === 'ddChecked' && value === true) {
+      const lastTypeNo = await fetchLatestTypeNo();
+      const newTypeNo = incrementTypeNo(lastTypeNo);
+      updatedEntries[index].ddNo = newTypeNo;
+    } else if (field === 'ddChecked' && value === false) {
+      // Clear ddNo when unchecking DD
+      updatedEntries[index].ddNo = '';
+    }
+
     setLogEntries(updatedEntries);
   };
 
@@ -134,16 +187,20 @@ export default function LogSection({
 
     // Prepare payload with logPageNo
     const payload = {
-      logPageNo, // Include the generated log page number
-      logEntries: logEntries.map((entry) => ({
+      logPageNo,
+      logEntries: logEntries.map((entry, index) => ({
         ...entry,
         id: entry.id || 0, // Ensure id is 0 for new entries
+        components: entry.componentRows, // Map componentRows to components for backend
+        sequence: index, // Add sequence to track order
       })),
+      status: 1,
+      updatedBy: 'user-id', // Replace with actual user ID from auth context
     };
 
     // Send data to backend
     try {
-      console.log(payload, 'payload');
+      console.log('📤 Saving logs:', payload);
       const response = await fetch(`${API_BASE}/logs/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -153,7 +210,59 @@ export default function LogSection({
       if (!response.ok) throw new Error('Failed to save logs');
 
       const data = await response.json();
-      console.log('Saved successfully:', data);
+      console.log('✅ Saved successfully:', data);
+
+      // Update local state with new logItem IDs from the response
+      if (data.newLogItems) {
+        const updatedEntries = logEntries.map((entry, index) => ({
+          ...entry,
+          id: data.newLogItems.find((item: any) => item.sequence === index)?.id || entry.id,
+        }));
+        setLogEntries(updatedEntries);
+      }
+
+      // Create deferral entries for logs with ddChecked
+      for (const [index, entry] of logEntries.entries()) {
+        if (entry.ddChecked && entry.ddNo) {
+          const deferralPayload = {
+            entries: [{
+              defect_reference: {
+                date: new Date().toISOString().split('T')[0], // Current date
+                dd: normalizeDdType(entry.ddType), // Normalize to "M" or "N"
+                log_item_no: data.newLogItems?.find((item: any) => item.sequence === index)?.id || '',
+                log_page: logPageNo,
+                mel_cat: normalizeMelCat(entry.cat), // Normalize to "A", "B", etc.
+                mel_cd_ref: entry.melCdlRef || '',
+                type_no: entry.ddNo,
+              },
+              description: entry.defectDetails || 'No description provided',
+              clear_reference: {},
+              enteredSign: '',
+              enteredAuth: '',
+              enteredAuthName: '',
+              enteredDate: '',
+              expDate: '',
+              clearedSign: '',
+              clearedAuth: '',
+              clearedAuthName: '',
+              clearedDate: '',
+              deferral: true,
+            }],
+          };
+
+          const deferralRes = await fetch(`${API_BASE}/deferrals`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(deferralPayload),
+          });
+
+          if (!deferralRes.ok) {
+            console.error('❌ Failed to create deferral for ddNo:', entry.ddNo);
+          } else {
+            console.log(`✅ Created deferral for ddNo: ${entry.ddNo}`);
+          }
+        }
+      }
 
       setShowError(false);
       alert('Logs saved successfully!');
@@ -162,7 +271,7 @@ export default function LogSection({
       // Refresh log page number after saving
       await fetchLogs();
     } catch (error) {
-      console.error('Save error:', error);
+      console.error('❌ Save error:', error);
       alert('Error saving logs. Please try again.');
     }
   };
@@ -560,9 +669,11 @@ export default function LogSection({
                             }
                             disabled={!!isFullyAuthorized}
                           >
-                            <option value="">Choose {field.placeholder}</option>
+                            <option value="">Choose {field.label}</option>
                             {field.options?.map((opt) => (
-                              <option key={opt}>{opt}</option>
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
                             ))}
                           </select>
                         ) : (
@@ -582,7 +693,7 @@ export default function LogSection({
                                 e.target.value
                               )
                             }
-                            disabled={!!isFullyAuthorized}
+                            disabled={!!isFullyAuthorized || field.name === 'ddNo'} // Disable ddNo input
                           />
                         )}
                       </div>
