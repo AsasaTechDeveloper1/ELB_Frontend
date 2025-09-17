@@ -18,6 +18,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 const initialLogEntry: LogEntry = {
   id: 0,
+  displayNumber: 1,
   updated_id: '',
   class: '',
   raisedBy: '',
@@ -67,11 +68,11 @@ const fetchLatestTypeNo = async (): Promise<string> => {
     const deferrals = await res.json();
     // Find the highest type_no
     const latestDeferral = deferrals
-      .filter((d: any) => d.defect_reference?.type_no)
+      .filter((d: any) => d.entries[0]?.defect_reference?.type_no)
       .sort((a: any, b: any) =>
-        b.defect_reference.type_no.localeCompare(a.defect_reference.type_no)
+        b.entries[0].defect_reference.type_no.localeCompare(a.entries[0].defect_reference.type_no)
       )[0];
-    return latestDeferral?.defect_reference?.type_no || 'DEF-00000';
+    return latestDeferral?.entries[0]?.defect_reference?.type_no || 'DEF-00000';
   } catch (error) {
     console.error('❌ Error fetching deferrals:', error);
     return 'DEF-00000'; // Fallback
@@ -185,17 +186,29 @@ export default function LogSection({
       return;
     }
 
-    // Prepare payload with logPageNo
+    // Prepare payload with normalized fields
     const payload = {
       logPageNo,
-      logEntries: logEntries.map((entry, index) => ({
-        ...entry,
-        id: entry.id || 0, // Ensure id is 0 for new entries
-        components: entry.componentRows, // Map componentRows to components for backend
-        sequence: index, // Add sequence to track order
+      logEntries: logEntries.map((entry) => ({
+        id: entry.id || undefined, // Use undefined for new entries to let backend generate ID
+        class: entry.class,
+        raisedBy: entry.raisedBy,
+        defectDetails: entry.defectDetails,
+        actionDetails: entry.actionDetails,
+        ddChecked: entry.ddChecked,
+        ddAction: entry.ddAction,
+        ddType: normalizeDdType(entry.ddType),
+        ddNo: entry.ddNo,
+        melCdlRef: entry.melCdlRef,
+        cat: normalizeMelCat(entry.cat),
+        indInspChecked: entry.indInspChecked,
+        sdr: entry.sdr,
+        mmsgFc: entry.mmsgFc,
+        ata: entry.ata,
+        components: entry.componentRows,
       })),
       status: 1,
-      updatedBy: 'user-id', // Replace with actual user ID from auth context
+      createdBy: 'user-id', // Replace with actual user ID from auth context
     };
 
     // Send data to backend
@@ -213,55 +226,13 @@ export default function LogSection({
       console.log('✅ Saved successfully:', data);
 
       // Update local state with new logItem IDs from the response
-      if (data.newLogItems) {
+      if (data.savedLogs) {
         const updatedEntries = logEntries.map((entry, index) => ({
           ...entry,
-          id: data.newLogItems.find((item: any) => item.sequence === index)?.id || entry.id,
+          id: data.savedLogs[index]?.logItemId || entry.id,
+          displayNumber: entry.displayNumber || index + 1,
         }));
         setLogEntries(updatedEntries);
-      }
-
-      // Create deferral entries for logs with ddChecked
-      for (const [index, entry] of logEntries.entries()) {
-        if (entry.ddChecked && entry.ddNo) {
-          const deferralPayload = {
-            entries: [{
-              defect_reference: {
-                date: new Date().toISOString().split('T')[0], // Current date
-                dd: normalizeDdType(entry.ddType), // Normalize to "M" or "N"
-                log_item_no: data.newLogItems?.find((item: any) => item.sequence === index)?.id || '',
-                log_page: logPageNo,
-                mel_cat: normalizeMelCat(entry.cat), // Normalize to "A", "B", etc.
-                mel_cd_ref: entry.melCdlRef || '',
-                type_no: entry.ddNo,
-              },
-              description: entry.defectDetails || 'No description provided',
-              clear_reference: {},
-              enteredSign: '',
-              enteredAuth: '',
-              enteredAuthName: '',
-              enteredDate: '',
-              expDate: '',
-              clearedSign: '',
-              clearedAuth: '',
-              clearedAuthName: '',
-              clearedDate: '',
-              deferral: true,
-            }],
-          };
-
-          const deferralRes = await fetch(`${API_BASE}/deferrals`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(deferralPayload),
-          });
-
-          if (!deferralRes.ok) {
-            console.error('❌ Failed to create deferral for ddNo:', entry.ddNo);
-          } else {
-            console.log(`✅ Created deferral for ddNo: ${entry.ddNo}`);
-          }
-        }
       }
 
       setShowError(false);
@@ -280,15 +251,20 @@ export default function LogSection({
     const newEntry = {
       ...initialLogEntry,
       id: 0,
+      displayNumber: logEntries.length + 1,
       componentRows: [{ partNo: '', serialOn: '', partOff: '', serialOff: '', grn: '' }],
     };
     setLogEntries([...logEntries, newEntry]);
+    setDescriptionErrors([...descriptionErrors, '']);
   };
 
   const removeLogEntry = (index: number) => {
     const updatedEntries = [...logEntries];
     updatedEntries.splice(index, 1);
     setLogEntries(updatedEntries);
+    const updatedErrors = [...descriptionErrors];
+    updatedErrors.splice(index, 1);
+    setDescriptionErrors(updatedErrors);
   };
 
   const addComponentRow = (logIndex: number) => {
@@ -385,7 +361,7 @@ export default function LogSection({
                       <div className="flex flex-wrap md:flex-nowrap items-center gap-4">
                         <div className="flex flex-row items-center gap-2 w-full sm:w-[350px] max-w-[350px]">
                           <h1 className="text-xl font-bold text-[#004051] w-[15px]">
-                            {entry.id && entry.id > 0 ? entry.id : index + 1}.
+                            {entry.displayNumber || index + 1}.
                           </h1>
 
                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-[320px]">

@@ -92,6 +92,63 @@ const initialEntry: DeferralEntry = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 
+// Function to increment type_no (e.g., DEF-00002 -> DEF-00003)
+const incrementTypeNo = (lastTypeNo: string): string => {
+  if (!lastTypeNo || !lastTypeNo.startsWith('DEF-')) {
+    return 'DEF-00001'; // Default if no valid type_no found
+  }
+  const numericPart = parseInt(lastTypeNo.replace('DEF-', ''), 10);
+  if (isNaN(numericPart)) {
+    return 'DEF-00001'; // Fallback if parsing fails
+  }
+  return `DEF-${String(numericPart + 1).padStart(5, '0')}`; // e.g., DEF-00003
+};
+
+// Fetch the latest type_no from deferrals
+const fetchLatestTypeNo = async (): Promise<string> => {
+  try {
+    const res = await fetch(`${API_BASE}/deferrals`);
+    if (!res.ok) throw new Error('Failed to fetch deferrals');
+    const deferrals = await res.json();
+    // Find the highest type_no from entries array
+    const latestDeferral = deferrals
+      .filter((d: any) => d.entries?.[0]?.defect_reference?.type_no)
+      .sort((a: any, b: any) =>
+        b.entries[0].defect_reference.type_no.localeCompare(a.entries[0].defect_reference.type_no)
+      )[0];
+    return latestDeferral?.entries[0]?.defect_reference?.type_no || 'DEF-00000';
+  } catch (error) {
+    console.error('❌ Error fetching deferrals:', error);
+    return 'DEF-00000'; // Fallback
+  }
+};
+
+// Denormalize dd to frontend format (e.g., "M" -> "Major (M)")
+const denormalizeDdType = (dd: string): string => {
+  if (dd === 'M') return 'Major (M)';
+  if (dd === 'N') return 'Minor (N)';
+  return dd || 'Minor (N)'; // Default to 'Minor (N)' if empty
+};
+
+// Normalize dd from backend format (e.g., "Major (M)" -> "M")
+const normalizeDdType = (dd: string): string => {
+  if (dd === 'Major (M)') return 'M';
+  if (dd === 'Minor (N)') return 'N';
+  return dd || ''; // Return as-is if not recognized
+};
+
+// Denormalize cat to frontend format (e.g., "A" -> "Cat A")
+const denormalizeMelCat = (cat: string): string => {
+  if (cat && ['A', 'B', 'C', 'D', 'U'].includes(cat)) return `Cat ${cat}`;
+  return cat || ''; // Return as-is if not valid
+};
+
+// Normalize cat from backend format (e.g., "Cat A" -> "A")
+const normalizeMelCat = (cat: string): string => {
+  if (cat && cat.startsWith('Cat ')) return cat.replace('Cat ', '');
+  return cat || ''; // Return as-is if not recognized
+};
+
 export default function DeferralsForm() {
   const sigCanvas = useRef<SignatureCanvas | null>(null);
   const [entries, setEntries] = useState<DeferralEntry[]>([{ ...initialEntry }]);
@@ -146,42 +203,45 @@ export default function DeferralsForm() {
       });
       const data = await res.json();
       if (res.ok) {
-        const fetchedEntries = data.map((item: any, index: number) => ({
-          ...initialEntry,
-          id: item.id,
-          groupNo: index + 1,
-          defect_reference: {
-            dd: item.defect_reference?.dd || null,
-            type_no: item.defect_reference?.type_no || null,
-            log_page: item.defect_reference?.log_page || null,
-            log_item_no: item.defect_reference?.log_item_no || null,
-            mel_cd_ref: item.defect_reference?.mel_cd_ref || null,
-            mel_cat: item.defect_reference?.mel_cat || null,
-            date: item.defect_reference?.date || null,
-          },
-          description: item.description || '',
-          clear_reference: {
-            staff_id: item.clear_reference?.staff_id || null,
-            date: item.clear_reference?.date || null,
-            log_page: item.clear_reference?.log_page || null,
-            log_item_no: item.clear_reference?.log_item_no || null,
-          },
-          enteredSign: item.enteredSign || '',
-          enteredAuth: item.enteredAuth || '',
-          enteredAuthName: item.enteredAuthName || '',
-          enteredDate: item.enteredDate || '',
-          expDate: item.expDate || '',
-          clearedSign: item.clearedSign || '',
-          clearedAuth: item.clearedAuth || '',
-          clearedAuthName: item.clearedAuthName || '',
-          clearedDate: item.clearedDate || '',
-        }));
-        setEntries(fetchedEntries);
+        // Map each deferral's first entry to the DeferralEntry interface
+        const fetchedEntries = data
+          .filter((item: any) => item.entries?.[0]) // Only include documents with at least one entry
+          .map((item: any, index: number) => ({
+            ...initialEntry,
+            id: item.id,
+            groupNo: index + 1,
+            defect_reference: {
+              dd: normalizeDdType(item.entries[0].defect_reference?.dd || ''),
+              type_no: item.entries[0].defect_reference?.type_no || null,
+              log_page: item.entries[0].defect_reference?.log_page || null,
+              log_item_no: item.entries[0].defect_reference?.log_item_no || null,
+              mel_cd_ref: item.entries[0].defect_reference?.mel_cd_ref || null,
+              mel_cat: normalizeMelCat(item.entries[0].defect_reference?.mel_cat || ''),
+              date: item.entries[0].defect_reference?.date || null,
+            },
+            description: item.entries[0].description || '',
+            clear_reference: {
+              staff_id: item.entries[0].clear_reference?.staff_id || null,
+              date: item.entries[0].clear_reference?.date || null,
+              log_page: item.entries[0].clear_reference?.log_page || null,
+              log_item_no: item.entries[0].clear_reference?.log_item_no || null,
+            },
+            enteredSign: item.entries[0].enteredSign || '',
+            enteredAuth: item.entries[0].enteredAuth || '',
+            enteredAuthName: item.entries[0].enteredAuthName || '',
+            enteredDate: item.entries[0].enteredDate || '',
+            expDate: item.entries[0].expDate || '',
+            clearedSign: item.entries[0].clearedSign || '',
+            clearedAuth: item.entries[0].clearedAuth || '',
+            clearedAuthName: item.entries[0].clearedAuthName || '',
+            clearedDate: item.entries[0].clearedDate || '',
+          }));
+        setEntries(fetchedEntries.length ? fetchedEntries : [{ ...initialEntry }]);
         setDescriptionErrors(fetchedEntries.map(() => ''));
         setAuthorizedEntries(fetchedEntries.map((_: DeferralEntry, idx: number) => idx).filter((idx: number) => fetchedEntries[idx].enteredAuth));
         setClearedEntries(fetchedEntries.map((_: DeferralEntry, idx: number) => idx).filter((idx: number) => fetchedEntries[idx].clearedAuth));
         const typeNos = data
-          .map((item: any) => item.defect_reference?.type_no)
+          .map((item: any) => item.entries[0]?.defect_reference?.type_no)
           .filter((typeNo: string | null): typeNo is string => typeNo !== null);
         setNextTypeNo(generateNextTypeNo(typeNos));
       } else {
@@ -260,8 +320,10 @@ export default function DeferralsForm() {
     }
   };
 
-  const addNewEntry = () => {
+  const addNewEntry = async () => {
     const newGroupNo = entries.length + 1;
+    const lastTypeNo = await fetchLatestTypeNo();
+    const newTypeNo = incrementTypeNo(lastTypeNo);
     setEntries([
       ...entries,
       {
@@ -269,15 +331,12 @@ export default function DeferralsForm() {
         groupNo: newGroupNo,
         defect_reference: {
           ...initialEntry.defect_reference,
-          type_no: nextTypeNo,
+          type_no: newTypeNo,
         },
       },
     ]);
     setDescriptionErrors([...descriptionErrors, '']);
-    const typeNos = entries
-      .map((e) => e.defect_reference.type_no)
-      .filter((typeNo): typeNo is string => typeNo !== null);
-    setNextTypeNo(generateNextTypeNo([...typeNos, nextTypeNo]));
+    setNextTypeNo(incrementTypeNo(newTypeNo));
   };
 
   const removeEntry = async (index: number) => {
@@ -301,7 +360,7 @@ export default function DeferralsForm() {
 
     const updatedEntries = [...entries];
     updatedEntries.splice(index, 1);
-    setEntries(updatedEntries);
+    setEntries(updatedEntries.length ? updatedEntries : [{ ...initialEntry }]);
     const updatedErrors = [...descriptionErrors];
     updatedErrors.splice(index, 1);
     setDescriptionErrors(updatedErrors);
@@ -312,7 +371,6 @@ export default function DeferralsForm() {
   };
 
   const handleCopy = async (index: number) => {
-    console.log("Copy action triggered");
     try {
       setLoading(true);
       setError(null);
@@ -320,8 +378,6 @@ export default function DeferralsForm() {
       const entry = entries[index];
       const logPageNo = entry.defect_reference.log_page;
       const logItemId = entry.defect_reference.log_item_no;
-
-      console.log(`Selected Log Page: ${logPageNo}, Log Item No: ${logItemId}`);
 
       if (!logPageNo) {
         setError('Log Page No is required in Defect Reference to copy the entry.');
@@ -344,22 +400,25 @@ export default function DeferralsForm() {
         return;
       }
 
+      // Fetch and increment ddNo
+      const lastTypeNo = await fetchLatestTypeNo();
+      const newDdNo = incrementTypeNo(lastTypeNo);
+
       const nextDisplayNumber = targetLog.items.length > 0
         ? Math.max(...targetLog.items.map((item) => item.displayNumber)) + 1
         : 1;
 
       const newLogItem: Partial<LogItem> = {
-        id: targetLog.id,
         displayNumber: nextDisplayNumber,
         defectDetails: entry.description,
         actionDetails: originalLogItem.actionDetails || '',
         raisedBy: originalLogItem.raisedBy || '',
-        ddChecked: true, // Set to true since copying a deferral
-        ddAction: originalLogItem.ddAction || 'Raised (R)',
-        ddType: entry.defect_reference.dd || originalLogItem.ddType || '',
-        ddNo: entry.defect_reference.type_no || '', // Set ddNo to deferral's type_no
+        ddChecked: true,
+        ddAction: 'Raised (R)',
+        ddType: entry.defect_reference.dd || '',
+        ddNo: newDdNo,
         melCdlRef: entry.defect_reference.mel_cd_ref || originalLogItem.melCdlRef || '',
-        cat: entry.defect_reference.mel_cat || originalLogItem.cat || '',
+        cat: entry.defect_reference.mel_cat || '',
         indInspChecked: originalLogItem.indInspChecked || false,
         sdr: originalLogItem.sdr || false,
         mmsgFc: originalLogItem.mmsgFc || '',
@@ -388,8 +447,6 @@ export default function DeferralsForm() {
         throw new Error('Failed to retrieve new log item ID from response');
       }
 
-      console.log(`New log item created with ID: ${newLogItemId} (Display Number: ${nextDisplayNumber}) in Log: ${targetLog.id}`);
-
       // Update the deferral's clear_reference with the new log item
       setEntries((prevEntries) =>
         prevEntries.map((e, i) =>
@@ -407,8 +464,9 @@ export default function DeferralsForm() {
       );
 
       await fetchLogs();
+      await fetchDeferrals();
 
-      alert('Log item copied and inserted successfully! Clearance Reference updated. ✅');
+      alert('Log item copied and clearance reference updated successfully! ✅');
     } catch (err: any) {
       console.error('Copy operation failed:', err);
       setError(`Error during copy operation: ${err.message}`);
@@ -481,42 +539,54 @@ export default function DeferralsForm() {
 
   const handleSave = async () => {
     try {
-      const payload = entries.map((entry) => ({
-        id: entry.id,
-        defect_reference: { ...entry.defect_reference },
-        description: entry.description,
-        clear_reference: { ...entry.clear_reference },
-        enteredSign: entry.enteredSign || '',
-        enteredAuth: entry.enteredAuth || '',
-        enteredAuthName: entry.enteredAuthName || '',
-        enteredDate: entry.enteredDate || '',
-        expDate: entry.expDate || '',
-        clearedSign: entry.clearedSign || '',
-        clearedAuth: entry.clearedAuth || '',
-        clearedAuthName: entry.clearedAuthName || '',
-        clearedDate: entry.clearedDate || '',
-      }));
-
-      if (payload.some((entry) => !entry.description || entry.description.trim() === '')) {
+      const errors = entries.map((entry) =>
+        !entry.description || entry.description.trim() === '' ? 'Description is required' : ''
+      );
+      setDescriptionErrors(errors);
+      if (errors.some((err) => err)) {
         alert('Description is required for all entries');
         return;
       }
 
       setLoading(true);
       setError(null);
-      const res = await fetch(`${API_BASE}/deferrals`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries: payload }),
-      });
 
-      const data = await res.json();
-      if (res.ok) {
-        alert('Deferrals saved successfully ✅');
-        await fetchDeferrals();
-      } else {
-        setError('Error saving deferrals: ' + data.error);
+      // Save each entry individually to match backend structure
+      const results = [];
+      for (const entry of entries) {
+        const payload = {
+          entries: [{
+            defect_reference: { ...entry.defect_reference },
+            description: entry.description,
+            clear_reference: { ...entry.clear_reference },
+            enteredSign: entry.enteredSign || '',
+            enteredAuth: entry.enteredAuth || '',
+            enteredAuthName: entry.enteredAuthName || '',
+            enteredDate: entry.enteredDate || '',
+            expDate: entry.expDate || '',
+            clearedSign: entry.clearedSign || '',
+            clearedAuth: entry.clearedAuth || '',
+            clearedAuthName: entry.clearedAuthName || '',
+            clearedDate: entry.clearedDate || '',
+            deferral: true,
+          }],
+        };
+
+        const res = await fetch(`${API_BASE}/deferrals`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to save deferral');
+        }
+        results.push(data);
       }
+
+      alert('Deferrals saved successfully ✅');
+      await fetchDeferrals();
     } catch (err: any) {
       setError('Error saving deferrals: ' + err.message);
     } finally {

@@ -7,6 +7,7 @@ export interface LogEntry {
   ddSign1: string;
   ddAuth1: string;
   id: number; // Client-side ID for log entry
+  displayNumber: number; // Client-side ID for log entry
   updated_id: string; // Client-side ID for log entry
   class: string;
   raisedBy: string;

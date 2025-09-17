@@ -17,6 +17,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 const initialLogEntry: LogEntry = {
   id: 0,
+  displayNumber: 1,
   updated_id: '',
   class: '',
   raisedBy: '',
@@ -58,6 +59,25 @@ const incrementTypeNo = (lastTypeNo: string): string => {
   return `DEF-${String(numericPart + 1).padStart(5, '0')}`; // e.g., DEF-00003
 };
 
+// Normalize functions to handle raw values from Firestore
+const normalizeDdAction = (action: string): string => {
+  if (action === 'R') return 'Raised (R)';
+  if (action === 'W') return 'Worked (W)';
+  if (action === 'C') return 'Cleared (C)';
+  return action || '';
+};
+
+const normalizeDdType = (type: string): string => {
+  if (type === 'M') return 'Major (M)';
+  if (type === 'N') return 'Minor (N)';
+  return type || '';
+};
+
+const normalizeCat = (cat: string): string => {
+  if (cat && ['A', 'B', 'C', 'D', 'U'].includes(cat)) return `Cat ${cat}`;
+  return cat || '';
+};
+
 export default function LogSection({
   logEntries,
   setLogEntries,
@@ -70,6 +90,9 @@ export default function LogSection({
   const params = useParams();
   const logId = params?.id as string;
 
+  // Debug log to inspect logEntries
+  console.log('LogSection logEntries:', logEntries);
+
   // Fetch the latest type_no from deferrals
   const fetchLatestTypeNo = async (): Promise<string> => {
     try {
@@ -78,11 +101,11 @@ export default function LogSection({
       const deferrals = await res.json();
       // Find the highest type_no
       const latestDeferral = deferrals
-        .filter((d: any) => d.defect_reference?.type_no)
+        .filter((d: any) => d.entries?.[0]?.defect_reference?.type_no) // Adjusted for deferral structure
         .sort((a: any, b: any) =>
-          b.defect_reference.type_no.localeCompare(a.defect_reference.type_no)
+          b.entries[0].defect_reference.type_no.localeCompare(a.entries[0].defect_reference.type_no)
         )[0];
-      return latestDeferral?.defect_reference?.type_no || 'DEF-00000';
+      return latestDeferral?.entries[0]?.defect_reference?.type_no || 'DEF-00000';
     } catch (error) {
       console.error('❌ Error fetching deferrals:', error);
       return 'DEF-00000'; // Fallback
@@ -156,49 +179,6 @@ export default function LogSection({
         setLogEntries(updatedEntries);
       }
 
-      // Create deferral entries for logs with ddChecked
-      for (const entry of logEntries) {
-        if (entry.ddChecked && entry.ddNo) {
-          const deferralPayload = {
-            entries: [{
-              defect_reference: {
-                date: new Date().toISOString().split('T')[0], // Current date
-                dd: entry.ddType || 'N',
-                log_item_no: entry.id || '',
-                log_page: 'LOG-00001',
-                mel_cat: entry.cat || '',
-                mel_cd_ref: entry.melCdlRef || '',
-                type_no: entry.ddNo,
-              },
-              description: entry.defectDetails || 'No description provided',
-              clear_reference: {},
-              enteredSign: '',
-              enteredAuth: '',
-              enteredAuthName: '',
-              enteredDate: '',
-              expDate: '',
-              clearedSign: '',
-              clearedAuth: '',
-              clearedAuthName: '',
-              clearedDate: '',
-              deferral: true,
-            }],
-          };
-
-          const deferralRes = await fetch(`${API_BASE}/deferrals`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(deferralPayload),
-          });
-
-          if (!deferralRes.ok) {
-            console.error('❌ Failed to create deferral for ddNo:', entry.ddNo);
-          } else {
-            console.log(`✅ Created deferral for ddNo: ${entry.ddNo}`);
-          }
-        }
-      }
-
       alert('Logs updated successfully!');
       setShowError(false);
     } catch (error) {
@@ -209,12 +189,16 @@ export default function LogSection({
 
   // Add / remove log
   const addNewLogEntry = () => {
-    setLogEntries([...logEntries, { ...initialLogEntry, id: 0 }]);
+    setLogEntries([...logEntries, { ...initialLogEntry, id: 0, displayNumber: logEntries.length + 1 }]);
   };
 
   const removeLogEntry = (index: number) => {
     const updatedEntries = [...logEntries];
     updatedEntries.splice(index, 1);
+    // Update displayNumber for remaining entries
+    updatedEntries.forEach((entry, i) => {
+      entry.displayNumber = i + 1;
+    });
     setLogEntries(updatedEntries);
   };
 
@@ -264,7 +248,7 @@ export default function LogSection({
                   LOG PAGE NUMBER:
                 </span>
                 <span className="text-sm font-semibold text-[#004051] bg-gray-100 border border-[#004051]/30 px-3 py-1 rounded-md shadow-sm uppercase">
-                  LOG-00001
+                  {logId || 'LOG-00001'}
                 </span>
               </div>
 
@@ -296,7 +280,7 @@ export default function LogSection({
                       <div className="flex flex-wrap md:flex-nowrap items-center gap-4">
                         <div className="flex flex-row items-center gap-2 w-full sm:w-[350px] max-w-[350px]">
                           <h1 className="text-xl font-bold text-[#004051] w-[15px]">
-                            {index + 1}.
+                            {entry.displayNumber}.
                           </h1>
 
                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-[320px]">
@@ -565,8 +549,8 @@ export default function LogSection({
                         type: 'select',
                         name: 'ddAction',
                         options: ['Raised (R)', 'Worked (W)', 'Cleared (C)'],
-                        value: entry.ddAction,
-                        invalid: entry.ddAction && !['Raised', 'Worked', 'Cleared'].includes(entry.ddAction),
+                        value: normalizeDdAction(entry.ddAction),
+                        invalid: entry.ddAction && !['Raised (R)', 'Worked (W)', 'Cleared (C)'].includes(entry.ddAction),
                         error: 'Select a valid DD Action',
                         placeholder: 'Action',
                       },
@@ -575,8 +559,8 @@ export default function LogSection({
                         type: 'select',
                         name: 'ddType',
                         options: ['Major (M)', 'Minor (N)'],
-                        value: entry.ddType,
-                        invalid: entry.ddType && !['Major', 'Minor'].includes(entry.ddType),
+                        value: normalizeDdType(entry.ddType),
+                        invalid: entry.ddType && !['Major (M)', 'Minor (N)'].includes(entry.ddType),
                         error: 'Select a valid DD Type',
                         placeholder: 'Type',
                       },
@@ -603,7 +587,7 @@ export default function LogSection({
                         type: 'select',
                         name: 'cat',
                         options: ['Cat A', 'Cat B', 'Cat C', 'Cat D', 'Cat U'],
-                        value: entry.cat,
+                        value: normalizeCat(entry.cat),
                         invalid: entry.cat && !['Cat A', 'Cat B', 'Cat C', 'Cat D', 'Cat U'].includes(entry.cat),
                         error: 'Select a valid Category',
                         placeholder: 'Cat',
@@ -630,7 +614,9 @@ export default function LogSection({
                           >
                             <option value="">Choose {field.placeholder}</option>
                             {field.options?.map((opt) => (
-                              <option key={opt}>{opt}</option>
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
                             ))}
                           </select>
                         ) : (
@@ -675,12 +661,12 @@ export default function LogSection({
                     </div>
                   </div>
                 )}
-                <div className="w-full flex flex-col md:flex-row items-start gap-4">
-                  <div className="flex flex-col min-w-[110px] pt-2 md:pt-7">
-                    <h2 className="text-md font-bold text-gray-700 mb-2">COMPONENTS: </h2>
-                  </div>
+                <h2 style={{ margin: 10, padding: 0 }} className="text-md font-bold text-gray-700 py-0">
+                  COMPONENTS:
+                </h2>
+                <div className="w-full flex flex-col md:flex-row items-start gap-4 mt-0" style={{ margin: 0, padding: 0 }}>
                   <div className="w-full overflow-x-auto">
-                    <table className="table-auto border border-gray-300 text-sm min-w-[900px]">
+                    <table className="table-auto border border-gray-300 text-sm">
                       <thead>
                         <tr className="bg-[#004051] text-white">
                           <th className="p-2 border border-gray-300">PART NO</th>
