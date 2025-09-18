@@ -10,6 +10,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 const initialLogEntry: LogEntry = {
   id: 0,
   updated_id: "",
+  displayNumber: 1,
   class: '',
   raisedBy: '',
   defectDetails: '',

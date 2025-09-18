@@ -110,6 +110,7 @@ const fetchLatestTypeNo = async (): Promise<string> => {
     const res = await fetch(`${API_BASE}/deferrals`);
     if (!res.ok) throw new Error('Failed to fetch deferrals');
     const deferrals = await res.json();
+    if (!deferrals || deferrals.length === 0) return 'DEF-00000'; // Explicitly handle empty response
     // Find the highest type_no from entries array
     const latestDeferral = deferrals
       .filter((d: any) => d.entries?.[0]?.defect_reference?.type_no)
@@ -151,7 +152,7 @@ const normalizeMelCat = (cat: string): string => {
 
 export default function DeferralsForm() {
   const sigCanvas = useRef<SignatureCanvas | null>(null);
-  const [entries, setEntries] = useState<DeferralEntry[]>([{ ...initialEntry }]);
+  const [entries, setEntries] = useState<DeferralEntry[]>([]);
   const [authModal, setAuthModal] = useState<{ type: 'entered' | 'cleared'; index: number } | null>(null);
   const [authData, setAuthData] = useState<{
     authId: string;
@@ -212,7 +213,7 @@ export default function DeferralsForm() {
             groupNo: index + 1,
             defect_reference: {
               dd: normalizeDdType(item.entries[0].defect_reference?.dd || ''),
-              type_no: item.entries[0].defect_reference?.type_no || null,
+              type_no: item.entries[0].defect_reference?.type_no || 'DEF-00001',
               log_page: item.entries[0].defect_reference?.log_page || null,
               log_item_no: item.entries[0].defect_reference?.log_item_no || null,
               mel_cd_ref: item.entries[0].defect_reference?.mel_cd_ref || null,
@@ -236,7 +237,7 @@ export default function DeferralsForm() {
             clearedAuthName: item.entries[0].clearedAuthName || '',
             clearedDate: item.entries[0].clearedDate || '',
           }));
-        setEntries(fetchedEntries.length ? fetchedEntries : [{ ...initialEntry }]);
+        setEntries(fetchedEntries);
         setDescriptionErrors(fetchedEntries.map(() => ''));
         setAuthorizedEntries(fetchedEntries.map((_: DeferralEntry, idx: number) => idx).filter((idx: number) => fetchedEntries[idx].enteredAuth));
         setClearedEntries(fetchedEntries.map((_: DeferralEntry, idx: number) => idx).filter((idx: number) => fetchedEntries[idx].clearedAuth));
@@ -246,9 +247,11 @@ export default function DeferralsForm() {
         setNextTypeNo(generateNextTypeNo(typeNos));
       } else {
         setError(data.error || 'Failed to fetch deferrals');
+        setEntries([]);
       }
     } catch (err: any) {
       setError('Error fetching deferrals: ' + err.message);
+      setEntries([]);
     } finally {
       setLoading(false);
     }
@@ -323,7 +326,13 @@ export default function DeferralsForm() {
   const addNewEntry = async () => {
     const newGroupNo = entries.length + 1;
     const lastTypeNo = await fetchLatestTypeNo();
-    const newTypeNo = incrementTypeNo(lastTypeNo);
+    const newTypeNo = entries.length === 0 && lastTypeNo === 'DEF-00000' ? 'DEF-00001' : incrementTypeNo(lastTypeNo);
+    const targetLog = logs.find((log) => log.logPageNo === 'LOG-00001'); // Assuming LOG-00001 is the default log
+    const nextDisplayNumber = (targetLog?.items ?? []).length > 0 
+      ? Math.max(...(targetLog?.items ?? []).map((item) => item.displayNumber)) + 1 
+      : 1;
+    const nextLogItemId = targetLog?.items.find((item) => item.displayNumber === nextDisplayNumber)?.id || null;
+
     setEntries([
       ...entries,
       {
@@ -332,6 +341,8 @@ export default function DeferralsForm() {
         defect_reference: {
           ...initialEntry.defect_reference,
           type_no: newTypeNo,
+          log_page: 'LOG-00001',
+          log_item_no: nextLogItemId,
         },
       },
     ]);
@@ -360,7 +371,7 @@ export default function DeferralsForm() {
 
     const updatedEntries = [...entries];
     updatedEntries.splice(index, 1);
-    setEntries(updatedEntries.length ? updatedEntries : [{ ...initialEntry }]);
+    setEntries(updatedEntries);
     const updatedErrors = [...descriptionErrors];
     updatedErrors.splice(index, 1);
     setDescriptionErrors(updatedErrors);
@@ -674,135 +685,44 @@ export default function DeferralsForm() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry, index) => (
-                <tr
-                  key={entry.id || `entry-${index}`}
-                  className={`border-t ${
-                    authorizedEntries.includes(index) && clearedEntries.includes(index)
-                      ? 'bg-[#e0f0ff] text-[#1c3b57]'
-                      : 'bg-white'
-                  }`}
-                >
-                  <td className="p-3 align-top border-t border-gray-300">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex gap-3 col-span-2">
-                        <div className="flex flex-col w-[80px]">
-                          <label className="text-sm font-medium text-gray-600 mb-1">DD</label>
-                          <select
-                            value={entry.defect_reference.dd || ''}
-                            onChange={(e) => handleInputChange(index, 'dd', e.target.value, 'defect_reference')}
-                            className="border border-gray-300 rounded px-2 py-2 w-full"
-                          >
-                            <option value="">—</option>
-                            <option value="M">M</option>
-                            <option value="N">N</option>
-                          </select>
-                        </div>
-                        <div className="flex flex-col flex-1">
-                          <label className="text-sm font-medium text-gray-600 mb-1">Type/No</label>
-                          <input
-                            type="text"
-                            value={entry.defect_reference.type_no || ''}
-                            readOnly
-                            className="border border-gray-300 rounded px-3 py-2 w-full bg-gray-100 cursor-not-allowed"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex gap-3 col-span-2">
-                        <div className="flex flex-col w-[180px]">
-                          <label className="text-sm font-medium text-gray-600 mb-1">Log Page No</label>
-                          <select
-                            value={entry.defect_reference.log_page || ''}
-                            onChange={(e) => handleInputChange(index, 'log_page', e.target.value, 'defect_reference')}
-                            className="border border-gray-300 rounded px-3 py-2 w-full"
-                          >
-                            <option value="">Select Log Page</option>
-                            {logs.map((log) => (
-                              <option key={log.id} value={log.logPageNo}>
-                                {log.logPageNo}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="flex flex-col w-[100px]">
-                          <label className="text-sm font-medium text-gray-600 mb-1">Item No</label>
-                          <select
-                            value={entry.defect_reference.log_item_no || ''}
-                            onChange={(e) => handleInputChange(index, 'log_item_no', e.target.value, 'defect_reference')}
-                            className="border border-gray-300 rounded px-3 py-2 w-full"
-                          >
-                            <option value="">Select Item</option>
-                            {entry.defect_reference.log_page &&
-                              logs
-                                .find((log) => log.logPageNo === entry.defect_reference.log_page)
-                                ?.items.map((item) => (
-                                  <option key={item.id} value={item.id}>
-                                    {item.displayNumber}
-                                  </option>
-                                ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="flex flex-col col-span-2">
-                        <label className="text-sm font-medium text-gray-600 mb-1">MEL/CD Ref (If Any)</label>
-                        <input
-                          type="text"
-                          value={entry.defect_reference.mel_cd_ref || ''}
-                          onChange={(e) => handleInputChange(index, 'mel_cd_ref', e.target.value, 'defect_reference')}
-                          className="border border-gray-300 rounded px-3 py-2 w-full"
-                        />
-                      </div>
-                      <div className="flex gap-3 col-span-2">
-                        <div className="flex flex-col w-[120px]">
-                          <label className="text-sm font-medium text-gray-600 mb-1">MEL Cat</label>
-                          <select
-                            value={entry.defect_reference.mel_cat || ''}
-                            onChange={(e) => handleInputChange(index, 'mel_cat', e.target.value, 'defect_reference')}
-                            className="border border-gray-300 rounded px-3 py-2 w-full"
-                          >
-                            <option value="">—</option>
-                            <option value="A">A</option>
-                            <option value="B">B</option>
-                            <option value="C">C</option>
-                            <option value="D">D</option>
-                            <option value="U">U</option>
-                          </select>
-                        </div>
-                        <div className="flex flex-col flex-1">
-                          <label className="text-sm font-medium text-gray-600 mb-1">Date</label>
-                          <input
-                            type="date"
-                            value={entry.defect_reference.date || ''}
-                            onChange={(e) => handleInputChange(index, 'date', e.target.value, 'defect_reference')}
-                            className="border border-gray-300 rounded px-3 py-2 w-full"
-                          />
-                        </div>
-                      </div>
-                    </div>
+              {entries.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="p-3 text-center text-gray-600">
+                    No Records
                   </td>
-                  <td className="p-3 align-top border-t border-gray-300">
-                    <textarea
-                      className="w-full min-w-[250px] md:min-w-[400px] h-54 border-2 border-[#004051] rounded-md p-2 text-md focus:outline-none focus:ring-2 focus:ring-[#004051]/30"
-                      placeholder="Enter description..."
-                      value={entry.description}
-                      onChange={(e) => handleInputChange(index, 'description', e.target.value)}
-                      disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
-                    />
-                    {descriptionErrors[index] && (
-                      <p className="text-red-600 text-sm mt-1">{descriptionErrors[index]}</p>
-                    )}
-                  </td>
-                  <td className="p-3 align-top border-t border-gray-300">
-                    <div>
+                </tr>
+              ) : (
+                entries.map((entry, index) => (
+                  <tr
+                    key={entry.id || `entry-${index}`}
+                    className={`border-t ${
+                      authorizedEntries.includes(index) && clearedEntries.includes(index)
+                        ? 'bg-[#e0f0ff] text-[#1c3b57]'
+                        : 'bg-white'
+                    }`}
+                  >
+                    <td className="p-3 align-top border-t border-gray-300">
                       <div className="grid grid-cols-2 gap-3">
                         <div className="flex gap-3 col-span-2">
-                          <div className="flex flex-col flex-1 w-full">
-                            <label className="text-sm font-medium text-gray-600 mb-1">Date</label>
+                          <div className="flex flex-col w-[80px]">
+                            <label className="text-sm font-medium text-gray-600 mb-1">DD</label>
+                            <select
+                              value={entry.defect_reference.dd || ''}
+                              onChange={(e) => handleInputChange(index, 'dd', e.target.value, 'defect_reference')}
+                              className="border border-gray-300 rounded px-2 py-2 w-full"
+                            >
+                              <option value="">—</option>
+                              <option value="M">M</option>
+                              <option value="N">N</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col flex-1">
+                            <label className="text-sm font-medium text-gray-600 mb-1">Type/No</label>
                             <input
-                              type="date"
-                              value={entry.clear_reference.date || ''}
-                              onChange={(e) => handleInputChange(index, 'date', e.target.value, 'clear_reference')}
-                              className="border border-gray-300 rounded px-3 py-2 w-full"
+                              type="text"
+                              value={entry.defect_reference.type_no || ''}
+                              readOnly
+                              className="border border-gray-300 rounded px-3 py-2 w-full bg-gray-100 cursor-not-allowed"
                             />
                           </div>
                         </div>
@@ -810,8 +730,8 @@ export default function DeferralsForm() {
                           <div className="flex flex-col w-[180px]">
                             <label className="text-sm font-medium text-gray-600 mb-1">Log Page No</label>
                             <select
-                              value={entry.clear_reference.log_page || ''}
-                              onChange={(e) => handleInputChange(index, 'log_page', e.target.value, 'clear_reference')}
+                              value={entry.defect_reference.log_page || ''}
+                              onChange={(e) => handleInputChange(index, 'log_page', e.target.value, 'defect_reference')}
                               className="border border-gray-300 rounded px-3 py-2 w-full"
                             >
                               <option value="">Select Log Page</option>
@@ -825,14 +745,14 @@ export default function DeferralsForm() {
                           <div className="flex flex-col w-[100px]">
                             <label className="text-sm font-medium text-gray-600 mb-1">Item No</label>
                             <select
-                              value={entry.clear_reference.log_item_no || ''}
-                              onChange={(e) => handleInputChange(index, 'log_item_no', e.target.value, 'clear_reference')}
+                              value={entry.defect_reference.log_item_no || ''}
+                              onChange={(e) => handleInputChange(index, 'log_item_no', e.target.value, 'defect_reference')}
                               className="border border-gray-300 rounded px-3 py-2 w-full"
                             >
                               <option value="">Select Item</option>
-                              {entry.clear_reference.log_page &&
+                              {entry.defect_reference.log_page &&
                                 logs
-                                  .find((log) => log.logPageNo === entry.clear_reference.log_page)
+                                  .find((log) => log.logPageNo === entry.defect_reference.log_page)
                                   ?.items.map((item) => (
                                     <option key={item.id} value={item.id}>
                                       {item.displayNumber}
@@ -841,37 +761,136 @@ export default function DeferralsForm() {
                             </select>
                           </div>
                         </div>
+                        <div className="flex flex-col col-span-2">
+                          <label className="text-sm font-medium text-gray-600 mb-1">MEL/CD Ref (If Any)</label>
+                          <input
+                            type="text"
+                            value={entry.defect_reference.mel_cd_ref || ''}
+                            onChange={(e) => handleInputChange(index, 'mel_cd_ref', e.target.value, 'defect_reference')}
+                            className="border border-gray-300 rounded px-3 py-2 w-full"
+                          />
+                        </div>
                         <div className="flex gap-3 col-span-2">
-                          <label className="font-medium text-gray-700">Cleared / Consolidated By :</label>
-                          <div className="break-words">{entry.clearedAuth || '—'}</div>
+                          <div className="flex flex-col w-[120px]">
+                            <label className="text-sm font-medium text-gray-600 mb-1">MEL Cat</label>
+                            <select
+                              value={entry.defect_reference.mel_cat || ''}
+                              onChange={(e) => handleInputChange(index, 'mel_cat', e.target.value, 'defect_reference')}
+                              className="border border-gray-300 rounded px-3 py-2 w-full"
+                            >
+                              <option value="">—</option>
+                              <option value="A">A</option>
+                              <option value="B">B</option>
+                              <option value="C">C</option>
+                              <option value="D">D</option>
+                              <option value="U">U</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col flex-1">
+                            <label className="text-sm font-medium text-gray-600 mb-1">Date</label>
+                            <input
+                              type="date"
+                              value={entry.defect_reference.date || ''}
+                              onChange={(e) => handleInputChange(index, 'date', e.target.value, 'defect_reference')}
+                              className="border border-gray-300 rounded px-3 py-2 w-full"
+                            />
+                          </div>
                         </div>
                       </div>
-                      <div className="col-span-6 flex justify-center space-x-4 mt-2">
-                        {!clearedEntries.includes(index) && (
+                    </td>
+                    <td className="p-3 align-top border-t border-gray-300">
+                      <textarea
+                        className="w-full min-w-[250px] md:min-w-[400px] h-54 border-2 border-[#004051] rounded-md p-2 text-md focus:outline-none focus:ring-2 focus:ring-[#004051]/30"
+                        placeholder="Enter description..."
+                        value={entry.description}
+                        onChange={(e) => handleInputChange(index, 'description', e.target.value)}
+                        disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                      />
+                      {descriptionErrors[index] && (
+                        <p className="text-red-600 text-sm mt-1">{descriptionErrors[index]}</p>
+                      )}
+                    </td>
+                    <td className="p-3 align-top border-t border-gray-300">
+                      <div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex gap-3 col-span-2">
+                            <div className="flex flex-col flex-1 w-full">
+                              <label className="text-sm font-medium text-gray-600 mb-1">Date</label>
+                              <input
+                                type="date"
+                                value={entry.clear_reference.date || ''}
+                                onChange={(e) => handleInputChange(index, 'date', e.target.value, 'clear_reference')}
+                                className="border border-gray-300 rounded px-3 py-2 w-full"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex gap-3 col-span-2">
+                            <div className="flex flex-col w-[180px]">
+                              <label className="text-sm font-medium text-gray-600 mb-1">Log Page No</label>
+                              <select
+                                value={entry.clear_reference.log_page || ''}
+                                onChange={(e) => handleInputChange(index, 'log_page', e.target.value, 'clear_reference')}
+                                className="border border-gray-300 rounded px-3 py-2 w-full"
+                              >
+                                <option value="">Select Log Page</option>
+                                {logs.map((log) => (
+                                  <option key={log.id} value={log.logPageNo}>
+                                    {log.logPageNo}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex flex-col w-[100px]">
+                              <label className="text-sm font-medium text-gray-600 mb-1">Item No</label>
+                              <select
+                                value={entry.clear_reference.log_item_no || ''}
+                                onChange={(e) => handleInputChange(index, 'log_item_no', e.target.value, 'clear_reference')}
+                                className="border border-gray-300 rounded px-3 py-2 w-full"
+                              >
+                                <option value="">Select Item</option>
+                                {entry.clear_reference.log_page &&
+                                  logs
+                                    .find((log) => log.logPageNo === entry.clear_reference.log_page)
+                                    ?.items.map((item) => (
+                                      <option key={item.id} value={item.id}>
+                                        {item.displayNumber}
+                                      </option>
+                                    ))}
+                              </select>
+                            </div>
+                          </div>
+                          <div className="flex gap-3 col-span-2">
+                            <label className="font-medium text-gray-700">Cleared / Consolidated By :</label>
+                            <div className="break-words">{entry.clearedAuth || '—'}</div>
+                          </div>
+                        </div>
+                        <div className="col-span-6 flex justify-center space-x-4 mt-2">
+                          {!clearedEntries.includes(index) && (
+                            <button
+                              onClick={() => openModal(index, 'cleared')}
+                              className="bg-[#004051] text-white px-6 py-1.5 text-sm rounded-md hover:bg-[#003040] transition"
+                            >
+                              Auth
+                            </button>
+                          )}
                           <button
-                            onClick={() => openModal(index, 'cleared')}
-                            className="bg-[#004051] text-white px-6 py-1.5 text-sm rounded-md hover:bg-[#003040] transition"
+                            onClick={() => handleCopy(index)}
+                            className="bg-[#06b6d4] hover:bg-[#06b6d4] text-white px-4 py-1 text-sm rounded-md font-medium"
                           >
-                            Auth
+                            Copy
                           </button>
-                        )}
-                        <button
-                          onClick={() => handleCopy(index)}
-                          className="bg-[#06b6d4] hover:bg-[#06b6d4] text-white px-4 py-1 text-sm rounded-md font-medium"
-                        >
-                          Copy
-                        </button>
-                        <button
-                          onClick={() => removeEntry(index)}
-                          className="bg-red-600 hover:bg-red-700 text-white px-4 py-1 text-sm rounded-md font-medium"
-                        >
-                          Remove
-                        </button>
+                          <button
+                            onClick={() => removeEntry(index)}
+                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-1 text-sm rounded-md font-medium"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -12,6 +12,7 @@ import { LogEntry, AuthData } from '../types';
 const initialLogEntry: LogEntry = {
   id: 1,
   updated_id: "",
+  displayNumber: 1,
   class: '',
   raisedBy: '',
   defectDetails: '',

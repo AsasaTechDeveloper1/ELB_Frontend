@@ -1,6 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import { LogEntry, ComponentRow } from '../../types';
 
 interface LogSectionProps {
@@ -50,13 +51,13 @@ const initialLogEntry: LogEntry = {
 // Function to increment type_no (e.g., DEF-00002 -> DEF-00003)
 const incrementTypeNo = (lastTypeNo: string): string => {
   if (!lastTypeNo || !lastTypeNo.startsWith('DEF-')) {
-    return 'DEF-00001'; // Default if no valid type_no found
+    return 'DEF-00001';
   }
   const numericPart = parseInt(lastTypeNo.replace('DEF-', ''), 10);
   if (isNaN(numericPart)) {
-    return 'DEF-00001'; // Fallback if parsing fails
+    return 'DEF-00001';
   }
-  return `DEF-${String(numericPart + 1).padStart(5, '0')}`; // e.g., DEF-00003
+  return `DEF-${String(numericPart + 1).padStart(5, '0')}`;
 };
 
 // Normalize functions to handle raw values from Firestore
@@ -89,6 +90,36 @@ export default function LogSection({
 }: LogSectionProps) {
   const params = useParams();
   const logId = params?.id as string;
+  const [logPageNo, setLogPageNo] = useState<string>('');
+
+  // Fetch log data when component mounts
+  useEffect(() => {
+    const fetchLogData = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/logs/${logId}`);
+        if (!res.ok) throw new Error('Failed to fetch log data');
+        const data = await res.json();
+        setLogPageNo(data.logPageNo || 'LOG-00001');
+        if (data.items) {
+          setLogEntries(
+            data.items.map((entry: any, index: number) => ({
+              ...initialLogEntry,
+              ...entry,
+              componentRows: entry.components || [initialLogEntry.componentRows[0]],
+              displayNumber: index + 1, // Set displayNumber based on order, not class
+            }))
+          );
+        }
+      } catch (error) {
+        console.error('❌ Error fetching log data:', error);
+        setLogPageNo('LOG-00001');
+      }
+    };
+
+    if (logId) {
+      fetchLogData();
+    }
+  }, [logId, setLogEntries]);
 
   // Debug log to inspect logEntries
   console.log('LogSection logEntries:', logEntries);
@@ -99,16 +130,15 @@ export default function LogSection({
       const res = await fetch(`${API_BASE}/deferrals`);
       if (!res.ok) throw new Error('Failed to fetch deferrals');
       const deferrals = await res.json();
-      // Find the highest type_no
       const latestDeferral = deferrals
-        .filter((d: any) => d.entries?.[0]?.defect_reference?.type_no) // Adjusted for deferral structure
+        .filter((d: any) => d.entries?.[0]?.defect_reference?.type_no)
         .sort((a: any, b: any) =>
           b.entries[0].defect_reference.type_no.localeCompare(a.entries[0].defect_reference.type_no)
         )[0];
       return latestDeferral?.entries[0]?.defect_reference?.type_no || 'DEF-00000';
     } catch (error) {
       console.error('❌ Error fetching deferrals:', error);
-      return 'DEF-00000'; // Fallback
+      return 'DEF-00000';
     }
   };
 
@@ -117,17 +147,16 @@ export default function LogSection({
     const updatedEntries = [...logEntries];
     updatedEntries[index] = { ...updatedEntries[index], [field]: value };
 
-    // If DD checkbox is checked, fetch and increment type_no
     if (field === 'ddChecked' && value === true) {
       const lastTypeNo = await fetchLatestTypeNo();
       const newTypeNo = incrementTypeNo(lastTypeNo);
       updatedEntries[index].ddNo = newTypeNo;
     } else if (field === 'ddChecked' && value === false) {
-      // Clear ddNo when unchecking DD
       updatedEntries[index].ddNo = '';
     }
 
-    setLogEntries(updatedEntries);
+    // Update displayNumber independently of class
+    setLogEntries(updatedEntries.map((entry, i) => ({ ...entry, displayNumber: i + 1 })));
   };
 
   // Update existing log
@@ -150,14 +179,14 @@ export default function LogSection({
     try {
       console.log('📤 Updating logs:', logEntries);
 
-      // Prepare payload for the backend
       const payload = {
         logEntries: logEntries.map((entry) => ({
           ...entry,
-          components: entry.componentRows, // Map componentRows to components for backend
+          components: entry.componentRows,
+          id: entry.id || undefined, // Include existing ID if present
         })),
         status: 1,
-        updatedBy: 'user-id', // Replace with actual user ID from auth context
+        updatedBy: 'user-id',
       };
 
       const res = await fetch(`${API_BASE}/logs/${logId}`, {
@@ -170,15 +199,16 @@ export default function LogSection({
       const data = await res.json();
       console.log(`✅ Updated log ${logId}:`, data);
 
-      // Update local state with new logItem IDs from the response
       if (data.newLogItems) {
         const updatedEntries = logEntries.map((entry, index) => ({
           ...entry,
           id: data.newLogItems[index]?.id || entry.id,
+          displayNumber: index + 1,
         }));
         setLogEntries(updatedEntries);
       }
 
+      setLogPageNo(data.logPageNo || logPageNo);
       alert('Logs updated successfully!');
       setShowError(false);
     } catch (error) {
@@ -189,17 +219,17 @@ export default function LogSection({
 
   // Add / remove log
   const addNewLogEntry = () => {
-    setLogEntries([...logEntries, { ...initialLogEntry, id: 0, displayNumber: logEntries.length + 1 }]);
+    const newEntries = [
+      ...logEntries,
+      { ...initialLogEntry, id: 0, displayNumber: logEntries.length + 1 },
+    ];
+    setLogEntries(newEntries.map((entry, i) => ({ ...entry, displayNumber: i + 1 })));
   };
 
   const removeLogEntry = (index: number) => {
     const updatedEntries = [...logEntries];
     updatedEntries.splice(index, 1);
-    // Update displayNumber for remaining entries
-    updatedEntries.forEach((entry, i) => {
-      entry.displayNumber = i + 1;
-    });
-    setLogEntries(updatedEntries);
+    setLogEntries(updatedEntries.map((entry, i) => ({ ...entry, displayNumber: i + 1 })));
   };
 
   // Component rows
@@ -238,20 +268,14 @@ export default function LogSection({
         {/* Sticky Header */}
         <header className="sticky top-0 z-20 border-b-2 border-[#004051] pb-2 pr-4 bg-white">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-[#004051] uppercase">
-              Defect & Action Log
-            </h1>
-
+            <h1 className="text-xl font-bold text-[#004051] uppercase">Defect & Action Log</h1>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-gray-800 uppercase">
-                  LOG PAGE NUMBER:
-                </span>
+                <span className="font-medium text-gray-800 uppercase">LOG PAGE NUMBER:</span>
                 <span className="text-sm font-semibold text-[#004051] bg-gray-100 border border-[#004051]/30 px-3 py-1 rounded-md shadow-sm uppercase">
-                  {logId || 'LOG-00001'}
+                  {logPageNo}
                 </span>
               </div>
-
               <button
                 className="text-white font-semibold px-4 py-1 rounded-md shadow-sm hover:bg-[#003340] transition-colors"
                 style={{ backgroundColor: '#004051' }}
@@ -282,7 +306,6 @@ export default function LogSection({
                           <h1 className="text-xl font-bold text-[#004051] w-[15px]">
                             {entry.displayNumber}.
                           </h1>
-
                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-[320px]">
                             <label className="text-sm font-medium text-gray-700 w-[60px] min-w-[60px]">
                               CLASS:
@@ -291,9 +314,7 @@ export default function LogSection({
                               <select
                                 className="border p-2 rounded"
                                 value={entry.class}
-                                onChange={(e) => {
-                                  handleLogInputChange(index, 'class', e.target.value);
-                                }}
+                                onChange={(e) => handleLogInputChange(index, 'class', e.target.value)}
                               >
                                 {['L', 'P', 'LI'].map((opt) => (
                                   <option key={opt} value={opt}>
@@ -302,9 +323,7 @@ export default function LogSection({
                                 ))}
                               </select>
                               {entry.class && !/^(L|P|LI)$/i.test(entry.class) && (
-                                <p className="text-red-500 text-xs mt-1">
-                                  Must be L, P, or LI
-                                </p>
+                                <p className="text-red-500 text-xs mt-1">Must be L, P, or LI</p>
                               )}
                             </div>
                           </div>
@@ -325,15 +344,11 @@ export default function LogSection({
                               }`}
                               placeholder="Auth ID / (Staff ID)"
                               value={entry.raisedBy}
-                              onChange={(e) =>
-                                handleLogInputChange(index, 'raisedBy', e.target.value)
-                              }
+                              onChange={(e) => handleLogInputChange(index, 'raisedBy', e.target.value)}
                               disabled={(Boolean(entry.authenticated) || isFullyAuthorized) as boolean}
                             />
                             {!entry.raisedBy && showError && (
-                              <span className="text-red-500 text-xs mt-1">
-                                Raised by is required
-                              </span>
+                              <span className="text-red-500 text-xs mt-1">Raised by is required</span>
                             )}
                           </div>
                         </div>
@@ -341,9 +356,7 @@ export default function LogSection({
                     </div>
                   </div>
                   <div className="w-full mt-2">
-                    <label className="text-sm font-medium text-gray-600">
-                      DEFECT DETAILS:
-                    </label>
+                    <label className="text-sm font-medium text-gray-600">DEFECT DETAILS:</label>
                     <textarea
                       placeholder="Details..."
                       rows={3}
@@ -419,9 +432,7 @@ export default function LogSection({
                         <input
                           type="checkbox"
                           checked={entry.indInspChecked}
-                          onChange={(e) =>
-                            handleLogInputChange(index, 'indInspChecked', e.target.checked)
-                          }
+                          onChange={(e) => handleLogInputChange(index, 'indInspChecked', e.target.checked)}
                           className="h-5 w-5 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
                           disabled={!!isFullyAuthorized}
                         />
@@ -432,9 +443,7 @@ export default function LogSection({
                 </div>
                 <div className="flex flex-col md:flex-row gap-4 w-full items-start">
                   <div className="flex-1 min-w-[280px]">
-                    <label className="text-sm font-medium text-gray-600">
-                      ACTION DETAILS:
-                    </label>
+                    <label className="text-sm font-medium text-gray-600">ACTION DETAILS:</label>
                     <textarea
                       placeholder="Details..."
                       rows={3}
@@ -463,15 +472,11 @@ export default function LogSection({
                       <div className="mt-2 flex flex-col sm:flex-row items-start sm:items-center flex-wrap gap-x-4 gap-y-2 text-sm">
                         <div className="font-medium text-gray-700 w-full md:w-[250px]">
                           SHORT SIGN AUTH ID:{' '}
-                          <span className="font-medium text-gray-800">
-                            {entry.shortSignAuthId}
-                          </span>
+                          <span className="font-medium text-gray-800">{entry.shortSignAuthId}</span>
                         </div>
                         <div className="font-medium text-gray-700 w-full md:w-[250px]">
                           SHORT SIGN AUTH NAME:{' '}
-                          <span className="font-medium text-gray-800">
-                            {entry.shortSignAuthName}
-                          </span>
+                          <span className="font-medium text-gray-800">{entry.shortSignAuthName}</span>
                         </div>
                       </div>
                     )}
@@ -525,15 +530,11 @@ export default function LogSection({
                         <div className="flex flex-row flex-wrap items-center gap-2 w-full min-w-[120px]">
                           <div className="font-medium text-gray-700 min-w-[100px]">
                             AUTH ID:{' '}
-                            <span className="font-medium text-gray-800">
-                              {entry.actionAuthId}
-                            </span>
+                            <span className="font-medium text-gray-800">{entry.actionAuthId}</span>
                           </div>
                           <div className="font-medium text-gray-700 min-w-[100px]">
                             AUTH NAME:{' '}
-                            <span className="font-medium text-gray-800">
-                              {entry.actionAuthName}
-                            </span>
+                            <span className="font-medium text-gray-800">{entry.actionAuthName}</span>
                           </div>
                         </div>
                       )}
@@ -636,7 +637,7 @@ export default function LogSection({
                                 e.target.value
                               )
                             }
-                            disabled={!!isFullyAuthorized || field.name === 'ddNo'} // Disable ddNo input
+                            disabled={!!isFullyAuthorized || field.name === 'ddNo'}
                           />
                         )}
                       </div>
