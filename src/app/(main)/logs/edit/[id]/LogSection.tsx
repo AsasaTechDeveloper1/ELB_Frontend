@@ -102,11 +102,11 @@ export default function LogSection({
         setLogPageNo(data.logPageNo || 'LOG-00001');
         if (data.items) {
           setLogEntries(
-            data.items.map((entry: any, index: number) => ({
+            data.items.map((entry: any) => ({
               ...initialLogEntry,
               ...entry,
               componentRows: entry.components || [initialLogEntry.componentRows[0]],
-              displayNumber: index + 1, // Set displayNumber based on order, not class
+              displayNumber: entry.displayNumber || 1, // Use displayNumber from backend
             }))
           );
         }
@@ -155,8 +155,7 @@ export default function LogSection({
       updatedEntries[index].ddNo = '';
     }
 
-    // Update displayNumber independently of class
-    setLogEntries(updatedEntries.map((entry, i) => ({ ...entry, displayNumber: i + 1 })));
+    setLogEntries(updatedEntries); // Remove displayNumber reassignment
   };
 
   // Update existing log
@@ -221,15 +220,15 @@ export default function LogSection({
   const addNewLogEntry = () => {
     const newEntries = [
       ...logEntries,
-      { ...initialLogEntry, id: 0, displayNumber: logEntries.length + 1 },
+      { ...initialLogEntry, id: 0 }, // Backend will assign displayNumber
     ];
-    setLogEntries(newEntries.map((entry, i) => ({ ...entry, displayNumber: i + 1 })));
+    setLogEntries(newEntries);
   };
 
   const removeLogEntry = (index: number) => {
     const updatedEntries = [...logEntries];
     updatedEntries.splice(index, 1);
-    setLogEntries(updatedEntries.map((entry, i) => ({ ...entry, displayNumber: i + 1 })));
+    setLogEntries(updatedEntries); // Remove displayNumber reassignment
   };
 
   // Component rows
