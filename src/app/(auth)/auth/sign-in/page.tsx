@@ -24,24 +24,25 @@ export default function SignIn() {
           <div className="hidden w-full p-7.5 xl:block xl:w-1/2">
             <div className="custom-gradient-1 overflow-hidden rounded-2xl px-12.5 pt-12.5 dark:!bg-dark-2 dark:bg-none flex flex-col items-center text-center" style={{ maxHeight: '620px' }}>
               
-              <Link className="mb-8 pt-18 inline-block" href="/">
-                <Image
-                  className="hidden dark:block mx-auto"
+              {/* <Link className="mb-8 pt-18 inline-block" href="/">
+              </Link> */}
+              <Image 
+                  className="hidden dark:block mx-auto mb-4"
                   src={"/images/logo/picture1.png"}
-                  alt="Logo"
                   width={176}
                   height={32}
+                  alt="ELB Logo"
+                  role="presentation"
+                  quality={100}
                 />
                 <Image
-                  className="dark:hidden mx-auto"
+                  className="dark:hidden mx-auto mb-4"
                   src={"/images/logo/picture1.png"}
-                  alt="Logo"
+                  alt="ELB Logo"
                   width={176}
                   height={32}
                   style={{ width: '125px' }}
                 />
-              </Link>
-
               <p className="mb-3 text-xl font-medium text-dark dark:text-white">
                 Sign in to your account
               </p>

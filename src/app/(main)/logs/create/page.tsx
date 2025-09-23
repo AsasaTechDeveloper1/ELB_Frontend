@@ -8,7 +8,6 @@ import ChecksSection from './ChecksSection';
 import AuthModal from './AuthModal';
 import { LogEntry, AuthData } from '../types';
 
-
 const initialLogEntry: LogEntry = {
   id: 1,
   updated_id: "",

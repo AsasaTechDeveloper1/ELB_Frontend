@@ -91,38 +91,47 @@ export default function LogSection({
   const params = useParams();
   const logId = params?.id as string;
   const [logPageNo, setLogPageNo] = useState<string>('');
+  const [isFetchingLog, setIsFetchingLog] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [fetchingDdIndices, setFetchingDdIndices] = useState<number[]>([]);
 
   // Fetch log data when component mounts
   useEffect(() => {
     const fetchLogData = async () => {
+      setIsFetchingLog(true);
       try {
         const res = await fetch(`${API_BASE}/logs/${logId}`);
         if (!res.ok) throw new Error('Failed to fetch log data');
         const data = await res.json();
         setLogPageNo(data.logPageNo || 'LOG-00001');
         if (data.items) {
-          setLogEntries(
-            data.items.map((entry: any) => ({
+          // Sort entries by displayNumber in ascending order
+          const sortedEntries = data.items
+            .map((entry: any) => ({
               ...initialLogEntry,
               ...entry,
               componentRows: entry.components || [initialLogEntry.componentRows[0]],
-              displayNumber: entry.displayNumber || 1, // Use displayNumber from backend
+              displayNumber: entry.displayNumber || 1,
+              ddAction: normalizeDdAction(entry.ddAction),
+              ddType: normalizeDdType(entry.ddType),
+              cat: normalizeCat(entry.cat),
             }))
-          );
+            .sort((a: LogEntry, b: LogEntry) => a.displayNumber - b.displayNumber);
+          setLogEntries(sortedEntries);
+          setDescriptionErrors(new Array(sortedEntries.length).fill(''));
         }
       } catch (error) {
         console.error('❌ Error fetching log data:', error);
         setLogPageNo('LOG-00001');
+      } finally {
+        setIsFetchingLog(false);
       }
     };
 
     if (logId) {
       fetchLogData();
     }
-  }, [logId, setLogEntries]);
-
-  // Debug log to inspect logEntries
-  console.log('LogSection logEntries:', logEntries);
+  }, [logId, setLogEntries, setDescriptionErrors]);
 
   // Fetch the latest type_no from deferrals
   const fetchLatestTypeNo = async (): Promise<string> => {
@@ -133,7 +142,7 @@ export default function LogSection({
       const latestDeferral = deferrals
         .filter((d: any) => d.entries?.[0]?.defect_reference?.type_no)
         .sort((a: any, b: any) =>
-          b.entries[0].defect_reference.type_no.localeCompare(a.entries[0].defect_reference.type_no)
+          a.entries[0].defect_reference.type_no.localeCompare(b.entries[0].defect_reference.type_no)
         )[0];
       return latestDeferral?.entries[0]?.defect_reference?.type_no || 'DEF-00000';
     } catch (error) {
@@ -148,14 +157,19 @@ export default function LogSection({
     updatedEntries[index] = { ...updatedEntries[index], [field]: value };
 
     if (field === 'ddChecked' && value === true) {
-      const lastTypeNo = await fetchLatestTypeNo();
-      const newTypeNo = incrementTypeNo(lastTypeNo);
-      updatedEntries[index].ddNo = newTypeNo;
+      setFetchingDdIndices((prev) => [...prev, index]);
+      try {
+        const lastTypeNo = await fetchLatestTypeNo();
+        const newTypeNo = incrementTypeNo(lastTypeNo);
+        updatedEntries[index].ddNo = newTypeNo;
+      } finally {
+        setFetchingDdIndices((prev) => prev.filter((i) => i !== index));
+      }
     } else if (field === 'ddChecked' && value === false) {
       updatedEntries[index].ddNo = '';
     }
 
-    setLogEntries(updatedEntries); // Remove displayNumber reassignment
+    setLogEntries(updatedEntries);
   };
 
   // Update existing log
@@ -175,14 +189,16 @@ export default function LogSection({
       return;
     }
 
+    setIsUpdating(true);
     try {
-      console.log('📤 Updating logs:', logEntries);
-
       const payload = {
         logEntries: logEntries.map((entry) => ({
           ...entry,
           components: entry.componentRows,
-          id: entry.id || undefined, // Include existing ID if present
+          id: entry.id || undefined,
+          ddAction: normalizeDdAction(entry.ddAction),
+          ddType: normalizeDdType(entry.ddType),
+          cat: normalizeCat(entry.cat),
         })),
         status: 1,
         updatedBy: 'user-id',
@@ -199,11 +215,16 @@ export default function LogSection({
       console.log(`✅ Updated log ${logId}:`, data);
 
       if (data.newLogItems) {
-        const updatedEntries = logEntries.map((entry, index) => ({
-          ...entry,
-          id: data.newLogItems[index]?.id || entry.id,
-          displayNumber: index + 1,
-        }));
+        const updatedEntries = data.newLogItems
+          .map((entry: any, index: number) => ({
+            ...logEntries[index],
+            id: entry.id || logEntries[index].id,
+            displayNumber: entry.displayNumber || index + 1,
+            ddAction: normalizeDdAction(entry.ddAction),
+            ddType: normalizeDdType(entry.ddType),
+            cat: normalizeCat(entry.cat),
+          }))
+          .sort((a: LogEntry, b: LogEntry) => a.displayNumber - b.displayNumber);
         setLogEntries(updatedEntries);
       }
 
@@ -213,6 +234,8 @@ export default function LogSection({
     } catch (error) {
       console.error('❌ Update error:', error);
       alert('Error updating logs. Please try again.');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -220,15 +243,19 @@ export default function LogSection({
   const addNewLogEntry = () => {
     const newEntries = [
       ...logEntries,
-      { ...initialLogEntry, id: 0 }, // Backend will assign displayNumber
+      { ...initialLogEntry, id: 0, displayNumber: logEntries.length + 1 },
     ];
     setLogEntries(newEntries);
+    setDescriptionErrors([...descriptionErrors, '']);
   };
 
   const removeLogEntry = (index: number) => {
     const updatedEntries = [...logEntries];
     updatedEntries.splice(index, 1);
-    setLogEntries(updatedEntries); // Remove displayNumber reassignment
+    setLogEntries(updatedEntries);
+    const updatedErrors = [...descriptionErrors];
+    updatedErrors.splice(index, 1);
+    setDescriptionErrors(updatedErrors);
   };
 
   // Component rows
@@ -271,16 +298,33 @@ export default function LogSection({
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-gray-800 uppercase">LOG PAGE NUMBER:</span>
-                <span className="text-sm font-semibold text-[#004051] bg-gray-100 border border-[#004051]/30 px-3 py-1 rounded-md shadow-sm uppercase">
-                  {logPageNo}
-                </span>
+                {isFetchingLog ? (
+                  <span className="text-sm font-semibold text-[#004051] bg-gray-100 border border-[#004051]/30 px-3 py-1 rounded-md shadow-sm uppercase animate-pulse">
+                    Loading...
+                  </span>
+                ) : (
+                  <span className="text-sm font-semibold text-[#004051] bg-gray-100 border border-[#004051]/30 px-3 py-1 rounded-md shadow-sm uppercase">
+                    {logPageNo}
+                  </span>
+                )}
               </div>
               <button
-                className="text-white font-semibold px-4 py-1 rounded-md shadow-sm hover:bg-[#003340] transition-colors"
+                className="text-white font-semibold px-4 py-1 rounded-md shadow-sm hover:bg-[#003340] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 style={{ backgroundColor: '#004051' }}
                 onClick={handleUpdate}
+                disabled={isUpdating}
               >
-                Update
+                {isUpdating ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Updating...
+                  </>
+                ) : (
+                  'Update'
+                )}
               </button>
             </div>
           </div>
@@ -290,6 +334,7 @@ export default function LogSection({
         <div className="overflow-y-auto max-h-[600px] p-4 space-y-6">
           {logEntries.map((entry, index) => {
             const isFullyAuthorized = entry.shortSignAuthId && entry.actionAuthId;
+            const isFetchingDd = fetchingDdIndices.includes(index);
             return (
               <div
                 key={`log-entry-${index}`}
@@ -311,15 +356,19 @@ export default function LogSection({
                             </label>
                             <div className="flex flex-col w-full sm:w-[350px] max-w-[350px]">
                               <select
-                                className="border p-2 rounded"
+                                className={`border ${
+                                  entry.class && !/^(L|P|LI)$/i.test(entry.class)
+                                    ? 'border-red-500'
+                                    : 'border-gray-300'
+                                } rounded px-3 py-2 text-base focus:ring-2 focus:ring-[#004051]`}
                                 value={entry.class}
                                 onChange={(e) => handleLogInputChange(index, 'class', e.target.value)}
+                                disabled={(Boolean(entry.authenticated) || isFullyAuthorized) as boolean}
                               >
-                                {['L', 'P', 'LI'].map((opt) => (
-                                  <option key={opt} value={opt}>
-                                    {opt}
-                                  </option>
-                                ))}
+                                <option value="">Select Class</option>
+                                <option value="L">Line-based (L)</option>
+                                <option value="P">PIREP (P)</option>
+                                <option value="LI">Info Only (I)</option>
                               </select>
                               {entry.class && !/^(L|P|LI)$/i.test(entry.class) && (
                                 <p className="text-red-500 text-xs mt-1">Must be L, P, or LI</p>
@@ -423,7 +472,7 @@ export default function LogSection({
                           checked={entry.ddChecked}
                           onChange={(e) => handleLogInputChange(index, 'ddChecked', e.target.checked)}
                           className="h-5 w-5 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
-                          disabled={!!isFullyAuthorized}
+                          disabled={!!isFullyAuthorized || isFetchingDd}
                         />
                         <label className="text-sm font-medium text-gray-600">DD</label>
                       </div>
@@ -550,7 +599,7 @@ export default function LogSection({
                         name: 'ddAction',
                         options: ['Raised (R)', 'Worked (W)', 'Cleared (C)'],
                         value: normalizeDdAction(entry.ddAction),
-                        invalid: entry.ddAction && !['Raised (R)', 'Worked (W)', 'Cleared (C)'].includes(entry.ddAction),
+                        invalid: entry.ddAction && !['Raised (R)', 'Worked (W)', 'Cleared (C)'].includes(normalizeDdAction(entry.ddAction)),
                         error: 'Select a valid DD Action',
                         placeholder: 'Action',
                       },
@@ -560,7 +609,7 @@ export default function LogSection({
                         name: 'ddType',
                         options: ['Major (M)', 'Minor (N)'],
                         value: normalizeDdType(entry.ddType),
-                        invalid: entry.ddType && !['Major (M)', 'Minor (N)'].includes(entry.ddType),
+                        invalid: entry.ddType && !['Major (M)', 'Minor (N)'].includes(normalizeDdType(entry.ddType)),
                         error: 'Select a valid DD Type',
                         placeholder: 'Type',
                       },
@@ -588,7 +637,7 @@ export default function LogSection({
                         name: 'cat',
                         options: ['Cat A', 'Cat B', 'Cat C', 'Cat D', 'Cat U'],
                         value: normalizeCat(entry.cat),
-                        invalid: entry.cat && !['Cat A', 'Cat B', 'Cat C', 'Cat D', 'Cat U'].includes(entry.cat),
+                        invalid: entry.cat && !['Cat A', 'Cat B', 'Cat C', 'Cat D', 'Cat U'].includes(normalizeCat(entry.cat)),
                         error: 'Select a valid Category',
                         placeholder: 'Cat',
                       },
@@ -620,24 +669,34 @@ export default function LogSection({
                             ))}
                           </select>
                         ) : (
-                          <input
-                            type="text"
-                            placeholder="Type here ..."
-                            className={`w-full border ${
-                              field.value && field.pattern && !field.pattern.test(field.value)
-                                ? 'border-red-500'
-                                : 'border-gray-300'
-                            } rounded px-2 py-2 text-sm focus:ring-2 focus:ring-[#004051]`}
-                            value={field.value}
-                            onChange={(e) =>
-                              handleLogInputChange(
-                                index,
-                                field.name as keyof LogEntry,
-                                e.target.value
-                              )
-                            }
-                            disabled={!!isFullyAuthorized || field.name === 'ddNo'}
-                          />
+                          <div className="relative w-full">
+                            <input
+                              type="text"
+                              placeholder="Type here ..."
+                              className={`w-full border ${
+                                field.value && field.pattern && !field.pattern.test(field.value)
+                                  ? 'border-red-500'
+                                  : 'border-gray-300'
+                              } rounded px-2 py-2 text-sm focus:ring-2 focus:ring-[#004051]`}
+                              value={field.value}
+                              onChange={(e) =>
+                                handleLogInputChange(
+                                  index,
+                                  field.name as keyof LogEntry,
+                                  e.target.value
+                                )
+                              }
+                              disabled={!!isFullyAuthorized || field.name === 'ddNo' || (field.name === 'ddNo' && isFetchingDd)}
+                            />
+                            {field.name === 'ddNo' && isFetchingDd && (
+                              <div className="absolute right-2 top-2 animate-spin h-4 w-4 text-gray-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     ))}

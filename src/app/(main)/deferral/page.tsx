@@ -95,13 +95,13 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 // Function to increment type_no (e.g., DEF-00002 -> DEF-00003)
 const incrementTypeNo = (lastTypeNo: string): string => {
   if (!lastTypeNo || !lastTypeNo.startsWith('DEF-')) {
-    return 'DEF-00001'; // Default if no valid type_no found
+    return 'DEF-00001';
   }
   const numericPart = parseInt(lastTypeNo.replace('DEF-', ''), 10);
   if (isNaN(numericPart)) {
-    return 'DEF-00001'; // Fallback if parsing fails
+    return 'DEF-00001';
   }
-  return `DEF-${String(numericPart + 1).padStart(5, '0')}`; // e.g., DEF-00003
+  return `DEF-${String(numericPart + 1).padStart(5, '0')}`;
 };
 
 // Fetch the latest type_no from deferrals
@@ -110,8 +110,7 @@ const fetchLatestTypeNo = async (): Promise<string> => {
     const res = await fetch(`${API_BASE}/deferrals`);
     if (!res.ok) throw new Error('Failed to fetch deferrals');
     const deferrals = await res.json();
-    if (!deferrals || deferrals.length === 0) return 'DEF-00000'; // Explicitly handle empty response
-    // Find the highest type_no from entries array
+    if (!deferrals || deferrals.length === 0) return 'DEF-00000';
     const latestDeferral = deferrals
       .filter((d: any) => d.entries?.[0]?.defect_reference?.type_no)
       .sort((a: any, b: any) =>
@@ -120,7 +119,7 @@ const fetchLatestTypeNo = async (): Promise<string> => {
     return latestDeferral?.entries[0]?.defect_reference?.type_no || 'DEF-00000';
   } catch (error) {
     console.error('❌ Error fetching deferrals:', error);
-    return 'DEF-00000'; // Fallback
+    return 'DEF-00000';
   }
 };
 
@@ -128,26 +127,26 @@ const fetchLatestTypeNo = async (): Promise<string> => {
 const denormalizeDdType = (dd: string): string => {
   if (dd === 'M') return 'Major (M)';
   if (dd === 'N') return 'Minor (N)';
-  return dd || 'Minor (N)'; // Default to 'Minor (N)' if empty
+  return dd || 'Minor (N)';
 };
 
 // Normalize dd from backend format (e.g., "Major (M)" -> "M")
 const normalizeDdType = (dd: string): string => {
   if (dd === 'Major (M)') return 'M';
   if (dd === 'Minor (N)') return 'N';
-  return dd || ''; // Return as-is if not recognized
+  return dd || '';
 };
 
 // Denormalize cat to frontend format (e.g., "A" -> "Cat A")
 const denormalizeMelCat = (cat: string): string => {
   if (cat && ['A', 'B', 'C', 'D', 'U'].includes(cat)) return `Cat ${cat}`;
-  return cat || ''; // Return as-is if not valid
+  return cat || '';
 };
 
 // Normalize cat from backend format (e.g., "Cat A" -> "A")
 const normalizeMelCat = (cat: string): string => {
   if (cat && cat.startsWith('Cat ')) return cat.replace('Cat ', '');
-  return cat || ''; // Return as-is if not recognized
+  return cat || '';
 };
 
 export default function DeferralsForm() {
@@ -173,6 +172,7 @@ export default function DeferralsForm() {
   const [authorizedEntries, setAuthorizedEntries] = useState<number[]>([]);
   const [clearedEntries, setClearedEntries] = useState<number[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [actionLoading, setActionLoading] = useState<{ [key: number]: { [key: string]: boolean } }>({});
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<Log[]>([]);
   const [nextTypeNo, setNextTypeNo] = useState<string>('DEF-00001');
@@ -193,6 +193,14 @@ export default function DeferralsForm() {
     return `DEF-${nextNumber.toString().padStart(5, '0')}`;
   };
 
+  // Set loading state for specific actions
+  const setActionLoadingState = (index: number, action: string, state: boolean) => {
+    setActionLoading((prev) => ({
+      ...prev,
+      [index]: { ...prev[index], [action]: state },
+    }));
+  };
+
   // Fetch deferrals from the backend
   const fetchDeferrals = async () => {
     setLoading(true);
@@ -204,9 +212,8 @@ export default function DeferralsForm() {
       });
       const data = await res.json();
       if (res.ok) {
-        // Map each deferral's first entry to the DeferralEntry interface
         const fetchedEntries = data
-          .filter((item: any) => item.entries?.[0]) // Only include documents with at least one entry
+          .filter((item: any) => item.entries?.[0])
           .map((item: any, index: number) => ({
             ...initialEntry,
             id: item.id,
@@ -259,6 +266,7 @@ export default function DeferralsForm() {
 
   // Fetch logs from the backend
   const fetchLogs = async () => {
+    setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/logs`, {
         method: 'GET',
@@ -279,6 +287,8 @@ export default function DeferralsForm() {
       }
     } catch (err: any) {
       setError('Error fetching logs: ' + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -324,36 +334,42 @@ export default function DeferralsForm() {
   };
 
   const addNewEntry = async () => {
-    const newGroupNo = entries.length + 1;
-    const lastTypeNo = await fetchLatestTypeNo();
-    const newTypeNo = entries.length === 0 && lastTypeNo === 'DEF-00000' ? 'DEF-00001' : incrementTypeNo(lastTypeNo);
-    const targetLog = logs.find((log) => log.logPageNo === 'LOG-00001'); // Assuming LOG-00001 is the default log
-    const nextDisplayNumber = (targetLog?.items ?? []).length > 0 
-      ? Math.max(...(targetLog?.items ?? []).map((item) => item.displayNumber)) + 1 
-      : 1;
-    const nextLogItemId = targetLog?.items.find((item) => item.displayNumber === nextDisplayNumber)?.id || null;
+    setActionLoadingState(entries.length, 'add', true);
+    try {
+      const newGroupNo = entries.length + 1;
+      const lastTypeNo = await fetchLatestTypeNo();
+      const newTypeNo = entries.length === 0 && lastTypeNo === 'DEF-00000' ? 'DEF-00001' : incrementTypeNo(lastTypeNo);
+      const targetLog = logs.find((log) => log.logPageNo === 'LOG-00001');
+      const nextDisplayNumber = (targetLog?.items ?? []).length > 0 
+        ? Math.max(...(targetLog?.items ?? []).map((item) => item.displayNumber)) + 1 
+        : 1;
+      const nextLogItemId = targetLog?.items.find((item) => item.displayNumber === nextDisplayNumber)?.id || null;
 
-    setEntries([
-      ...entries,
-      {
-        ...initialEntry,
-        groupNo: newGroupNo,
-        defect_reference: {
-          ...initialEntry.defect_reference,
-          type_no: newTypeNo,
-          log_page: 'LOG-00001',
-          log_item_no: nextLogItemId,
+      setEntries([
+        ...entries,
+        {
+          ...initialEntry,
+          groupNo: newGroupNo,
+          defect_reference: {
+            ...initialEntry.defect_reference,
+            type_no: newTypeNo,
+            log_page: 'LOG-00001',
+            log_item_no: nextLogItemId,
+          },
         },
-      },
-    ]);
-    setDescriptionErrors([...descriptionErrors, '']);
-    setNextTypeNo(incrementTypeNo(newTypeNo));
+      ]);
+      setDescriptionErrors([...descriptionErrors, '']);
+      setNextTypeNo(incrementTypeNo(newTypeNo));
+    } finally {
+      setActionLoadingState(entries.length, 'add', false);
+    }
   };
 
   const removeEntry = async (index: number) => {
-    const entry = entries[index];
-    if (entry.id) {
-      try {
+    setActionLoadingState(index, 'remove', true);
+    try {
+      const entry = entries[index];
+      if (entry.id) {
         const res = await fetch(`${API_BASE}/deferrals/${entry.id}`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
@@ -363,27 +379,28 @@ export default function DeferralsForm() {
           setError(data.error || 'Failed to delete deferral');
           return;
         }
-      } catch (err: any) {
-        setError('Error deleting deferral: ' + err.message);
-        return;
       }
+
+      const updatedEntries = [...entries];
+      updatedEntries.splice(index, 1);
+      setEntries(updatedEntries);
+      const updatedErrors = [...descriptionErrors];
+      updatedErrors.splice(index, 1);
+      setDescriptionErrors(updatedErrors);
+      setAuthorizedEntries((prev) => prev.filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+      setClearedEntries((prev) => prev.filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+
+      await fetchDeferrals();
+    } catch (err: any) {
+      setError('Error deleting deferral: ' + err.message);
+    } finally {
+      setActionLoadingState(index, 'remove', false);
     }
-
-    const updatedEntries = [...entries];
-    updatedEntries.splice(index, 1);
-    setEntries(updatedEntries);
-    const updatedErrors = [...descriptionErrors];
-    updatedErrors.splice(index, 1);
-    setDescriptionErrors(updatedErrors);
-    setAuthorizedEntries((prev) => prev.filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
-    setClearedEntries((prev) => prev.filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
-
-    await fetchDeferrals();
   };
 
   const handleCopy = async (index: number) => {
+    setActionLoadingState(index, 'copy', true);
     try {
-      setLoading(true);
       setError(null);
 
       const entry = entries[index];
@@ -411,7 +428,6 @@ export default function DeferralsForm() {
         return;
       }
 
-      // Fetch and increment ddNo
       const lastTypeNo = await fetchLatestTypeNo();
       const newDdNo = incrementTypeNo(lastTypeNo);
 
@@ -458,7 +474,6 @@ export default function DeferralsForm() {
         throw new Error('Failed to retrieve new log item ID from response');
       }
 
-      // Update the deferral's clear_reference with the new log item
       setEntries((prevEntries) =>
         prevEntries.map((e, i) =>
           i === index
@@ -482,7 +497,7 @@ export default function DeferralsForm() {
       console.error('Copy operation failed:', err);
       setError(`Error during copy operation: ${err.message}`);
     } finally {
-      setLoading(false);
+      setActionLoadingState(index, 'copy', false);
     }
   };
 
@@ -512,40 +527,45 @@ export default function DeferralsForm() {
       return;
     }
 
-    setEntries((prevEntries) =>
-      prevEntries.map((entry, i) =>
-        i === index
-          ? {
-              ...entry,
-              ...(authModal.type === 'entered'
-                ? {
-                    enteredSign: authData.sign,
-                    enteredAuth: authData.authId,
-                    enteredAuthName: authData.authName,
-                    enteredDate: authData.date,
-                    expDate: authData.expDate,
-                    defect_reference: { ...entry.defect_reference, date: authData.date },
-                  }
-                : {
-                    clearedSign: authData.sign,
-                    clearedAuth: authData.authId,
-                    clearedAuthName: authData.authName,
-                    clearedDate: authData.date,
-                    clear_reference: { ...entry.clear_reference, date: authData.date, staff_id: authData.authId },
-                  }),
-            }
-          : entry
-      )
-    );
+    setActionLoadingState(index, 'auth', true);
+    try {
+      setEntries((prevEntries) =>
+        prevEntries.map((entry, i) =>
+          i === index
+            ? {
+                ...entry,
+                ...(authModal.type === 'entered'
+                  ? {
+                      enteredSign: authData.sign,
+                      enteredAuth: authData.authId,
+                      enteredAuthName: authData.authName,
+                      enteredDate: authData.date,
+                      expDate: authData.expDate,
+                      defect_reference: { ...entry.defect_reference, date: authData.date },
+                    }
+                  : {
+                      clearedSign: authData.sign,
+                      clearedAuth: authData.authId,
+                      clearedAuthName: authData.authName,
+                      clearedDate: authData.date,
+                      clear_reference: { ...entry.clear_reference, date: authData.date, staff_id: authData.authId },
+                    }),
+              }
+            : entry
+        )
+      );
 
-    if (authModal.type === 'entered') {
-      setAuthorizedEntries((prev) => [...prev.filter((i) => i !== index), index]);
-    } else {
-      setClearedEntries((prev) => [...prev.filter((i) => i !== index), index]);
+      if (authModal.type === 'entered') {
+        setAuthorizedEntries((prev) => [...prev.filter((i) => i !== index), index]);
+      } else {
+        setClearedEntries((prev) => [...prev.filter((i) => i !== index), index]);
+      }
+
+      setAuthModal(null);
+      setAuthData({ authId: '', authName: '', password: '', sign: '', date: '', expDate: '' });
+    } finally {
+      setActionLoadingState(index, 'auth', false);
     }
-
-    setAuthModal(null);
-    setAuthData({ authId: '', authName: '', password: '', sign: '', date: '', expDate: '' });
   };
 
   const handleSave = async () => {
@@ -562,7 +582,6 @@ export default function DeferralsForm() {
       setLoading(true);
       setError(null);
 
-      // Save each entry individually to match backend structure
       const results = [];
       for (const entry of entries) {
         const payload = {
@@ -650,16 +669,36 @@ export default function DeferralsForm() {
               <button
                 onClick={handleSave}
                 disabled={loading}
-                className="bg-[#004051] text-white px-4 py-1 mr-4 rounded hover:bg-[#002f35] transition disabled:opacity-50"
+                className="bg-[#004051] text-white px-4 py-1 mr-4 rounded hover:bg-[#002f35] transition disabled:opacity-50 flex items-center gap-2"
               >
-                {loading ? 'Saving...' : 'Save'}
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
               </button>
               <button
                 onClick={fetchDeferrals}
                 disabled={loading}
-                className="bg-[#06b6d4] text-white px-4 py-1 mr-4 rounded hover:bg-[#005b6b] transition disabled:opacity-50"
+                className="bg-[#06b6d4] text-white px-4 py-1 mr-4 rounded hover:bg-[#005b6b] transition disabled:opacity-50 flex items-center gap-2"
               >
-                {loading ? 'Loading...' : 'Refresh'}
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Loading...
+                  </>
+                ) : (
+                  'Refresh'
+                )}
               </button>
             </div>
           </div>
@@ -672,7 +711,13 @@ export default function DeferralsForm() {
         )}
 
         {loading && (
-          <div className="mb-4 text-center text-gray-600">Loading deferrals...</div>
+          <div className="mb-4 text-center text-gray-600 flex items-center justify-center gap-2">
+            <svg className="animate-spin h-5 w-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Loading deferrals...
+          </div>
         )}
 
         <div className="overflow-x-auto">
@@ -710,6 +755,7 @@ export default function DeferralsForm() {
                               value={entry.defect_reference.dd || ''}
                               onChange={(e) => handleInputChange(index, 'dd', e.target.value, 'defect_reference')}
                               className="border border-gray-300 rounded px-2 py-2 w-full"
+                              disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
                             >
                               <option value="">—</option>
                               <option value="M">M</option>
@@ -733,6 +779,7 @@ export default function DeferralsForm() {
                               value={entry.defect_reference.log_page || ''}
                               onChange={(e) => handleInputChange(index, 'log_page', e.target.value, 'defect_reference')}
                               className="border border-gray-300 rounded px-3 py-2 w-full"
+                              disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
                             >
                               <option value="">Select Log Page</option>
                               {logs.map((log) => (
@@ -748,6 +795,7 @@ export default function DeferralsForm() {
                               value={entry.defect_reference.log_item_no || ''}
                               onChange={(e) => handleInputChange(index, 'log_item_no', e.target.value, 'defect_reference')}
                               className="border border-gray-300 rounded px-3 py-2 w-full"
+                              disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
                             >
                               <option value="">Select Item</option>
                               {entry.defect_reference.log_page &&
@@ -768,6 +816,7 @@ export default function DeferralsForm() {
                             value={entry.defect_reference.mel_cd_ref || ''}
                             onChange={(e) => handleInputChange(index, 'mel_cd_ref', e.target.value, 'defect_reference')}
                             className="border border-gray-300 rounded px-3 py-2 w-full"
+                            disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
                           />
                         </div>
                         <div className="flex gap-3 col-span-2">
@@ -777,6 +826,7 @@ export default function DeferralsForm() {
                               value={entry.defect_reference.mel_cat || ''}
                               onChange={(e) => handleInputChange(index, 'mel_cat', e.target.value, 'defect_reference')}
                               className="border border-gray-300 rounded px-3 py-2 w-full"
+                              disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
                             >
                               <option value="">—</option>
                               <option value="A">A</option>
@@ -793,6 +843,7 @@ export default function DeferralsForm() {
                               value={entry.defect_reference.date || ''}
                               onChange={(e) => handleInputChange(index, 'date', e.target.value, 'defect_reference')}
                               className="border border-gray-300 rounded px-3 py-2 w-full"
+                              disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
                             />
                           </div>
                         </div>
@@ -821,6 +872,7 @@ export default function DeferralsForm() {
                                 value={entry.clear_reference.date || ''}
                                 onChange={(e) => handleInputChange(index, 'date', e.target.value, 'clear_reference')}
                                 className="border border-gray-300 rounded px-3 py-2 w-full"
+                                disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
                               />
                             </div>
                           </div>
@@ -831,6 +883,7 @@ export default function DeferralsForm() {
                                 value={entry.clear_reference.log_page || ''}
                                 onChange={(e) => handleInputChange(index, 'log_page', e.target.value, 'clear_reference')}
                                 className="border border-gray-300 rounded px-3 py-2 w-full"
+                                disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
                               >
                                 <option value="">Select Log Page</option>
                                 {logs.map((log) => (
@@ -846,6 +899,7 @@ export default function DeferralsForm() {
                                 value={entry.clear_reference.log_item_no || ''}
                                 onChange={(e) => handleInputChange(index, 'log_item_no', e.target.value, 'clear_reference')}
                                 className="border border-gray-300 rounded px-3 py-2 w-full"
+                                disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
                               >
                                 <option value="">Select Item</option>
                                 {entry.clear_reference.log_page &&
@@ -868,22 +922,55 @@ export default function DeferralsForm() {
                           {!clearedEntries.includes(index) && (
                             <button
                               onClick={() => openModal(index, 'cleared')}
-                              className="bg-[#004051] text-white px-6 py-1.5 text-sm rounded-md hover:bg-[#003040] transition"
+                              className="bg-[#004051] text-white px-6 py-1.5 text-sm rounded-md hover:bg-[#003040] transition disabled:opacity-50 flex items-center gap-2"
+                              disabled={actionLoading[index]?.auth}
                             >
-                              Auth
+                              {actionLoading[index]?.auth ? (
+                                <>
+                                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Authorizing...
+                                </>
+                              ) : (
+                                'Auth'
+                              )}
                             </button>
                           )}
                           <button
                             onClick={() => handleCopy(index)}
-                            className="bg-[#06b6d4] hover:bg-[#06b6d4] text-white px-4 py-1 text-sm rounded-md font-medium"
+                            className="bg-[#06b6d4] text-white px-4 py-1 text-sm rounded-md font-medium hover:bg-[#005b6b] transition disabled:opacity-50 flex items-center gap-2"
+                            disabled={actionLoading[index]?.copy}
                           >
-                            Copy
+                            {actionLoading[index]?.copy ? (
+                              <>
+                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Copying...
+                              </>
+                            ) : (
+                              'Copy'
+                            )}
                           </button>
                           <button
                             onClick={() => removeEntry(index)}
-                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-1 text-sm rounded-md font-medium"
+                            className="bg-red-600 text-white px-4 py-1 text-sm rounded-md font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2"
+                            disabled={actionLoading[index]?.remove}
                           >
-                            Remove
+                            {actionLoading[index]?.remove ? (
+                              <>
+                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Removing...
+                              </>
+                            ) : (
+                              'Remove'
+                            )}
                           </button>
                         </div>
                       </div>
@@ -898,9 +985,20 @@ export default function DeferralsForm() {
         <div className="flex justify-center mb-6 mt-4">
           <button
             onClick={addNewEntry}
-            className="bg-[#004051] hover:bg-[#006172] text-white px-6 py-2 rounded-md font-medium"
+            className="bg-[#004051] text-white px-6 py-2 rounded-md font-medium hover:bg-[#006172] transition disabled:opacity-50 flex items-center gap-2"
+            disabled={actionLoading[entries.length]?.add}
           >
-            + Add New Entry
+            {actionLoading[entries.length]?.add ? (
+              <>
+                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Adding...
+              </>
+            ) : (
+              '+ Add New Entry'
+            )}
           </button>
         </div>
       </div>
@@ -998,9 +1096,20 @@ export default function DeferralsForm() {
               </button>
               <button
                 onClick={saveAuthorization}
-                className="px-5 py-2 text-sm font-medium bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition"
+                className="px-5 py-2 text-sm font-medium bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition flex items-center gap-2"
+                disabled={actionLoading[authModal.index]?.auth}
               >
-                Auth
+                {actionLoading[authModal.index]?.auth ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Authorizing...
+                  </>
+                ) : (
+                  'Auth'
+                )}
               </button>
             </div>
           </div>

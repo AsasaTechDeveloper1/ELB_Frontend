@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MdAssignment } from 'react-icons/md'; // icon for logs
+import { MdAssignment } from 'react-icons/md';
 import {
   Table,
   TableBody,
@@ -28,15 +28,20 @@ export default function LogListPage() {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const router = useRouter();
   
-  // 🔹 Fetch logs
+  // 🔹 Fetch logs in ascending order
   useEffect(() => {
     async function fetchLogs() {
+      setLoading(true);
       try {
         const res = await fetch(`${API_BASE}/logs`);
         if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
 
         const data = await res.json();
-        setLogs(Array.isArray(data) ? data : []);
+        // Sort logs by logPageNo in ascending order
+        const sortedLogs = Array.isArray(data) 
+          ? data.sort((a: Log, b: Log) => a.logPageNo.localeCompare(b.logPageNo))
+          : [];
+        setLogs(sortedLogs);
       } catch (err) {
         console.error("Failed to fetch logs:", err);
         setLogs([]);
@@ -113,7 +118,13 @@ export default function LogListPage() {
       )}
 
       {loading ? (
-        <p className="text-gray-600">Loading logs...</p>
+        <div className="flex justify-center items-center py-4">
+          <svg className="animate-spin h-5 w-5 text-gray-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <p className="text-gray-600">Loading logs...</p>
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <Table>
@@ -136,7 +147,6 @@ export default function LogListPage() {
                     <TableCell>{log.status === 1 ? "Active" : "Inactive"}</TableCell>
                     <TableCell>{formatDate(log.createdAt)}</TableCell>
                     <TableCell>{formatDate(log.updatedAt)}</TableCell>
-
                     <TableCell className="flex gap-2 justify-center">
                       <button
                         onClick={() => handleEdit(log.id)}
