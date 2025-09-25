@@ -28,7 +28,7 @@ export default function LogListPage() {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const router = useRouter();
   
-  // 🔹 Fetch logs in ascending order
+  // 🔹 Fetch logs in descending order by createdAt for 0-based indexing
   useEffect(() => {
     async function fetchLogs() {
       setLoading(true);
@@ -37,9 +37,9 @@ export default function LogListPage() {
         if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
 
         const data = await res.json();
-        // Sort logs by logPageNo in ascending order
+        // Sort logs by createdAt in descending order
         const sortedLogs = Array.isArray(data) 
-          ? data.sort((a: Log, b: Log) => a.logPageNo.localeCompare(b.logPageNo))
+          ? data.sort((a: Log, b: Log) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
           : [];
         setLogs(sortedLogs);
       } catch (err) {
@@ -130,11 +130,11 @@ export default function LogListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[50px] text-center text-gray-700">#</TableHead>
+                <TableHead className="w-[50px] text-center text-gray-700 whitespace-nowrap">Flight Leg</TableHead>
+                <TableHead className="text-gray-700">Date</TableHead>
                 <TableHead className="text-gray-700">Log Page No</TableHead>
-                <TableHead className="text-gray-700">Status</TableHead>
-                <TableHead className="text-gray-700">Created At</TableHead>
-                <TableHead className="text-gray-700">Updated At</TableHead>
+                <TableHead className="text-gray-700">Flight No</TableHead>
+                <TableHead className="text-gray-700">Sector</TableHead>
                 <TableHead className="text-gray-700 text-center">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -142,11 +142,13 @@ export default function LogListPage() {
               {logs.length > 0 ? (
                 logs.map((log, index) => (
                   <TableRow key={log.id} className="text-gray-800">
-                    <TableCell className="text-center">{index + 1}</TableCell>
-                    <TableCell>{log.logPageNo}</TableCell>
-                    <TableCell>{log.status === 1 ? "Active" : "Inactive"}</TableCell>
+                    <TableCell className="text-center">
+                      {index === 0 ? 0 : -index}
+                    </TableCell>
                     <TableCell>{formatDate(log.createdAt)}</TableCell>
-                    <TableCell>{formatDate(log.updatedAt)}</TableCell>
+                    <TableCell>{log.logPageNo}</TableCell>
+                    <TableCell>EK0824</TableCell>
+                    <TableCell>DMM (ETD 01:15, 7 Mar 25) → DXB (ETA 02:17, 7 Mar 25)</TableCell>
                     <TableCell className="flex gap-2 justify-center">
                       <button
                         onClick={() => handleEdit(log.id)}
@@ -165,7 +167,7 @@ export default function LogListPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-gray-500 py-4">
+                  <TableCell colSpan={7} className="text-center text-gray-500 py-4">
                     No logs found.
                   </TableCell>
                 </TableRow>

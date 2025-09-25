@@ -6,6 +6,11 @@ import SignaturePad from 'react-signature-canvas';
 import type { SignatureCanvas } from 'react-signature-canvas';
 
 // Define interfaces
+interface HistoryItem {
+  raised: string;
+  worked: string;
+}
+
 interface DeferralEntry {
   id?: string;
   groupNo: number;
@@ -17,6 +22,7 @@ interface DeferralEntry {
     mel_cd_ref: string | null;
     mel_cat: string | null;
     date: string | null;
+    dd_action?: string | null; // Added dd_action field
   };
   description: string;
   clear_reference: {
@@ -34,6 +40,7 @@ interface DeferralEntry {
   clearedAuth: string;
   clearedAuthName: string;
   clearedDate: string;
+  history: HistoryItem[];
 }
 
 interface LogItem {
@@ -71,6 +78,7 @@ const initialEntry: DeferralEntry = {
     mel_cd_ref: null,
     mel_cat: null,
     date: null,
+    dd_action: null,
   },
   description: '',
   clear_reference: {
@@ -88,6 +96,7 @@ const initialEntry: DeferralEntry = {
   clearedAuth: '',
   clearedAuthName: '',
   clearedDate: '',
+  history: [],
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -153,6 +162,8 @@ export default function DeferralsForm() {
   const sigCanvas = useRef<SignatureCanvas | null>(null);
   const [entries, setEntries] = useState<DeferralEntry[]>([]);
   const [authModal, setAuthModal] = useState<{ type: 'entered' | 'cleared'; index: number } | null>(null);
+  const [historyModal, setHistoryModal] = useState<{ index: number } | null>(null);
+  const [tempHistory, setTempHistory] = useState<HistoryItem[]>([]);
   const [authData, setAuthData] = useState<{
     authId: string;
     authName: string;
@@ -226,6 +237,7 @@ export default function DeferralsForm() {
               mel_cd_ref: item.entries[0].defect_reference?.mel_cd_ref || null,
               mel_cat: normalizeMelCat(item.entries[0].defect_reference?.mel_cat || ''),
               date: item.entries[0].defect_reference?.date || null,
+              dd_action: item.entries[0].defect_reference?.dd_action || null,
             },
             description: item.entries[0].description || '',
             clear_reference: {
@@ -243,6 +255,7 @@ export default function DeferralsForm() {
             clearedAuth: item.entries[0].clearedAuth || '',
             clearedAuthName: item.entries[0].clearedAuthName || '',
             clearedDate: item.entries[0].clearedDate || '',
+            history: item.entries[0].history || [],
           }));
         setEntries(fetchedEntries);
         setDescriptionErrors(fetchedEntries.map(() => ''));
@@ -515,7 +528,7 @@ export default function DeferralsForm() {
     setAuthData((prev) => ({ ...prev, date: currentDate }));
   };
 
-  const saveAuthorization = () => {
+  const saveAuthorization = async () => {
     if (!authModal) return;
     const index = authModal.index;
     const entry = entries[index];
@@ -529,30 +542,60 @@ export default function DeferralsForm() {
 
     setActionLoadingState(index, 'auth', true);
     try {
+      const updatedEntry = {
+        ...entry,
+        ...(authModal.type === 'entered'
+          ? {
+              enteredSign: authData.sign,
+              enteredAuth: authData.authId,
+              enteredAuthName: authData.authName,
+              enteredDate: authData.date,
+              expDate: authData.expDate,
+              defect_reference: { ...entry.defect_reference, date: authData.date },
+            }
+          : {
+              clearedSign: authData.sign,
+              clearedAuth: authData.authId,
+              clearedAuthName: authData.authName,
+              clearedDate: authData.date,
+              clear_reference: { ...entry.clear_reference, date: authData.date, staff_id: authData.authId },
+            }),
+      };
+
+      // Save to backend immediately
+      const payload = {
+        entries: [{
+          defect_reference: updatedEntry.defect_reference,
+          description: updatedEntry.description,
+          clear_reference: updatedEntry.clear_reference,
+          enteredSign: updatedEntry.enteredSign,
+          enteredAuth: updatedEntry.enteredAuth,
+          enteredAuthName: updatedEntry.enteredAuthName,
+          enteredDate: updatedEntry.enteredDate,
+          expDate: updatedEntry.expDate,
+          clearedSign: updatedEntry.clearedSign,
+          clearedAuth: updatedEntry.clearedAuth,
+          clearedAuthName: updatedEntry.clearedAuthName,
+          clearedDate: updatedEntry.clearedDate,
+          deferral: true,
+          history: updatedEntry.history,
+        }],
+      };
+
+      const res = await fetch(`${API_BASE}/deferrals${entry.id ? `/${entry.id}` : ''}`, {
+        method: entry.id ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to save authorization');
+      }
+
+      // Update local state
       setEntries((prevEntries) =>
-        prevEntries.map((entry, i) =>
-          i === index
-            ? {
-                ...entry,
-                ...(authModal.type === 'entered'
-                  ? {
-                      enteredSign: authData.sign,
-                      enteredAuth: authData.authId,
-                      enteredAuthName: authData.authName,
-                      enteredDate: authData.date,
-                      expDate: authData.expDate,
-                      defect_reference: { ...entry.defect_reference, date: authData.date },
-                    }
-                  : {
-                      clearedSign: authData.sign,
-                      clearedAuth: authData.authId,
-                      clearedAuthName: authData.authName,
-                      clearedDate: authData.date,
-                      clear_reference: { ...entry.clear_reference, date: authData.date, staff_id: authData.authId },
-                    }),
-              }
-            : entry
-        )
+        prevEntries.map((e, i) => (i === index ? { ...updatedEntry, id: data.results[0].id } : e))
       );
 
       if (authModal.type === 'entered') {
@@ -563,8 +606,97 @@ export default function DeferralsForm() {
 
       setAuthModal(null);
       setAuthData({ authId: '', authName: '', password: '', sign: '', date: '', expDate: '' });
+      await fetchDeferrals(); // Fetch updated deferrals
+    } catch (err: any) {
+      setError('Error saving authorization: ' + err.message);
     } finally {
       setActionLoadingState(index, 'auth', false);
+    }
+  };
+
+  const openHistoryModal = (index: number) => {
+    setHistoryModal({ index });
+    setTempHistory(entries[index].history || []);
+  };
+
+  const addNewHistoryItem = () => {
+    setTempHistory([...tempHistory, { raised: '', worked: '' }]);
+  };
+
+  const updateHistoryItem = (histIndex: number, field: 'raised' | 'worked', value: string) => {
+    const updated = [...tempHistory];
+    updated[histIndex][field] = value;
+    setTempHistory(updated);
+  };
+
+  const removeHistoryItem = (histIndex: number) => {
+    const updated = [...tempHistory];
+    updated.splice(histIndex, 1);
+    setTempHistory(updated);
+  };
+
+  const saveHistory = async () => {
+    if (!historyModal) return;
+    const index = historyModal.index;
+    const entry = entries[index];
+
+    setActionLoadingState(index, 'history', true);
+    try {
+      const updatedEntry = { ...entry, history: tempHistory };
+
+      // Save to backend
+      const payload = {
+        entries: [{
+          defect_reference: updatedEntry.defect_reference,
+          description: updatedEntry.description,
+          clear_reference: updatedEntry.clear_reference,
+          enteredSign: updatedEntry.enteredSign,
+          enteredAuth: updatedEntry.enteredAuth,
+          enteredAuthName: updatedEntry.enteredAuthName,
+          enteredDate: updatedEntry.enteredDate,
+          expDate: updatedEntry.expDate,
+          clearedSign: updatedEntry.clearedSign,
+          clearedAuth: updatedEntry.clearedAuth,
+          clearedAuthName: updatedEntry.clearedAuthName,
+          clearedDate: updatedEntry.clearedDate,
+          deferral: true,
+          history: updatedEntry.history,
+        }],
+      };
+
+      const res = await fetch(`${API_BASE}/deferrals${entry.id ? `/${entry.id}` : ''}`, {
+        method: entry.id ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to save history');
+      }
+
+      // Extract the deferral ID from the response
+      let deferralId;
+      if (entry.id) {
+        deferralId = data.id;
+      } else {
+        deferralId = data.results?.[0]?.id;
+      }
+
+      if (!deferralId) {
+        throw new Error('Failed to retrieve deferral ID from response');
+      }
+
+      // Update local state
+      setEntries((prev) =>
+        prev.map((e, i) => (i === index ? { ...updatedEntry, id: deferralId } : e))
+      );
+      setHistoryModal(null);
+      await fetchDeferrals(); // Fetch updated deferrals
+    } catch (err: any) {
+      setError('Error saving history: ' + err.message);
+    } finally {
+      setActionLoadingState(index, 'history', false);
     }
   };
 
@@ -586,24 +718,25 @@ export default function DeferralsForm() {
       for (const entry of entries) {
         const payload = {
           entries: [{
-            defect_reference: { ...entry.defect_reference },
+            defect_reference: entry.defect_reference,
             description: entry.description,
-            clear_reference: { ...entry.clear_reference },
-            enteredSign: entry.enteredSign || '',
-            enteredAuth: entry.enteredAuth || '',
-            enteredAuthName: entry.enteredAuthName || '',
-            enteredDate: entry.enteredDate || '',
-            expDate: entry.expDate || '',
-            clearedSign: entry.clearedSign || '',
-            clearedAuth: entry.clearedAuth || '',
-            clearedAuthName: entry.clearedAuthName || '',
-            clearedDate: entry.clearedDate || '',
+            clear_reference: entry.clear_reference,
+            enteredSign: entry.enteredSign,
+            enteredAuth: entry.enteredAuth,
+            enteredAuthName: entry.enteredAuthName,
+            enteredDate: entry.enteredDate,
+            expDate: entry.expDate,
+            clearedSign: entry.clearedSign,
+            clearedAuth: entry.clearedAuth,
+            clearedAuthName: entry.clearedAuthName,
+            clearedDate: entry.clearedDate,
             deferral: true,
+            history: entry.history,
           }],
         };
 
-        const res = await fetch(`${API_BASE}/deferrals`, {
-          method: 'POST',
+        const res = await fetch(`${API_BASE}/deferrals${entry.id ? `/${entry.id}` : ''}`, {
+          method: entry.id ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
@@ -737,142 +870,44 @@ export default function DeferralsForm() {
                   </td>
                 </tr>
               ) : (
-                entries.map((entry, index) => (
-                  <tr
-                    key={entry.id || `entry-${index}`}
-                    className={`border-t ${
-                      authorizedEntries.includes(index) && clearedEntries.includes(index)
-                        ? 'bg-[#e0f0ff] text-[#1c3b57]'
-                        : 'bg-white'
-                    }`}
-                  >
-                    <td className="p-3 align-top border-t border-gray-300">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="flex gap-3 col-span-2">
-                          <div className="flex flex-col w-[80px]">
-                            <label className="text-sm font-medium text-gray-600 mb-1">DD</label>
-                            <select
-                              value={entry.defect_reference.dd || ''}
-                              onChange={(e) => handleInputChange(index, 'dd', e.target.value, 'defect_reference')}
-                              className="border border-gray-300 rounded px-2 py-2 w-full"
-                              disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
-                            >
-                              <option value="">—</option>
-                              <option value="M">M</option>
-                              <option value="N">N</option>
-                            </select>
-                          </div>
-                          <div className="flex flex-col flex-1">
-                            <label className="text-sm font-medium text-gray-600 mb-1">Type/No</label>
-                            <input
-                              type="text"
-                              value={entry.defect_reference.type_no || ''}
-                              readOnly
-                              className="border border-gray-300 rounded px-3 py-2 w-full bg-gray-100 cursor-not-allowed"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex gap-3 col-span-2">
-                          <div className="flex flex-col w-[180px]">
-                            <label className="text-sm font-medium text-gray-600 mb-1">Log Page No</label>
-                            <select
-                              value={entry.defect_reference.log_page || ''}
-                              onChange={(e) => handleInputChange(index, 'log_page', e.target.value, 'defect_reference')}
-                              className="border border-gray-300 rounded px-3 py-2 w-full"
-                              disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
-                            >
-                              <option value="">Select Log Page</option>
-                              {logs.map((log) => (
-                                <option key={log.id} value={log.logPageNo}>
-                                  {log.logPageNo}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="flex flex-col w-[100px]">
-                            <label className="text-sm font-medium text-gray-600 mb-1">Item No</label>
-                            <select
-                              value={entry.defect_reference.log_item_no || ''}
-                              onChange={(e) => handleInputChange(index, 'log_item_no', e.target.value, 'defect_reference')}
-                              className="border border-gray-300 rounded px-3 py-2 w-full"
-                              disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
-                            >
-                              <option value="">Select Item</option>
-                              {entry.defect_reference.log_page &&
-                                logs
-                                  .find((log) => log.logPageNo === entry.defect_reference.log_page)
-                                  ?.items.map((item) => (
-                                    <option key={item.id} value={item.id}>
-                                      {item.displayNumber}
-                                    </option>
-                                  ))}
-                            </select>
-                          </div>
-                        </div>
-                        <div className="flex flex-col col-span-2">
-                          <label className="text-sm font-medium text-gray-600 mb-1">MEL/CD Ref (If Any)</label>
-                          <input
-                            type="text"
-                            value={entry.defect_reference.mel_cd_ref || ''}
-                            onChange={(e) => handleInputChange(index, 'mel_cd_ref', e.target.value, 'defect_reference')}
-                            className="border border-gray-300 rounded px-3 py-2 w-full"
-                            disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
-                          />
-                        </div>
-                        <div className="flex gap-3 col-span-2">
-                          <div className="flex flex-col w-[120px]">
-                            <label className="text-sm font-medium text-gray-600 mb-1">MEL Cat</label>
-                            <select
-                              value={entry.defect_reference.mel_cat || ''}
-                              onChange={(e) => handleInputChange(index, 'mel_cat', e.target.value, 'defect_reference')}
-                              className="border border-gray-300 rounded px-3 py-2 w-full"
-                              disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
-                            >
-                              <option value="">—</option>
-                              <option value="A">A</option>
-                              <option value="B">B</option>
-                              <option value="C">C</option>
-                              <option value="D">D</option>
-                              <option value="U">U</option>
-                            </select>
-                          </div>
-                          <div className="flex flex-col flex-1">
-                            <label className="text-sm font-medium text-gray-600 mb-1">Date</label>
-                            <input
-                              type="date"
-                              value={entry.defect_reference.date || ''}
-                              onChange={(e) => handleInputChange(index, 'date', e.target.value, 'defect_reference')}
-                              className="border border-gray-300 rounded px-3 py-2 w-full"
-                              disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-3 align-top border-t border-gray-300">
-                      <textarea
-                        className="w-full min-w-[250px] md:min-w-[400px] h-54 border-2 border-[#004051] rounded-md p-2 text-md focus:outline-none focus:ring-2 focus:ring-[#004051]/30"
-                        placeholder="Enter description..."
-                        value={entry.description}
-                        onChange={(e) => handleInputChange(index, 'description', e.target.value)}
-                        disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
-                      />
-                      {descriptionErrors[index] && (
-                        <p className="text-red-600 text-sm mt-1">{descriptionErrors[index]}</p>
-                      )}
-                    </td>
-                    <td className="p-3 align-top border-t border-gray-300">
-                      <div>
+                entries.map((entry, index) => {
+                  const isCleared = entry.defect_reference.dd_action === 'Cleared (C)';
+                  return (
+                    <tr
+                      key={entry.id || `entry-${index}`}
+                      className={`border-t ${
+                        isCleared
+                          ? 'bg-gray-200 text-gray-500'
+                          : authorizedEntries.includes(index) && clearedEntries.includes(index)
+                          ? 'bg-[#e0f0ff] text-[#1c3b57]'
+                          : 'bg-white'
+                      }`}
+                    >
+                      <td className="p-3 align-top border-t border-gray-300">
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex gap-3 col-span-2">
-                            <div className="flex flex-col flex-1 w-full">
-                              <label className="text-sm font-medium text-gray-600 mb-1">Date</label>
+                            <div className="flex flex-col w-[80px]">
+                              <label className="text-sm font-medium text-gray-600 mb-1">DD</label>
+                              <select
+                                value={entry.defect_reference.dd || ''}
+                                onChange={(e) => handleInputChange(index, 'dd', e.target.value, 'defect_reference')}
+                                className={`border border-gray-300 rounded px-2 py-2 w-full ${
+                                  isCleared ? 'bg-gray-100 cursor-not-allowed' : ''
+                                }`}
+                                disabled={isCleared || authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                              >
+                                <option value="">—</option>
+                                <option value="M">M</option>
+                                <option value="N">N</option>
+                              </select>
+                            </div>
+                            <div className="flex flex-col flex-1">
+                              <label className="text-sm font-medium text-gray-600 mb-1">Type/No</label>
                               <input
-                                type="date"
-                                value={entry.clear_reference.date || ''}
-                                onChange={(e) => handleInputChange(index, 'date', e.target.value, 'clear_reference')}
-                                className="border border-gray-300 rounded px-3 py-2 w-full"
-                                disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                                type="text"
+                                value={entry.defect_reference.type_no || ''}
+                                readOnly
+                                className="border border-gray-300 rounded px-3 py-2 w-full bg-gray-100 cursor-not-allowed"
                               />
                             </div>
                           </div>
@@ -880,10 +915,12 @@ export default function DeferralsForm() {
                             <div className="flex flex-col w-[180px]">
                               <label className="text-sm font-medium text-gray-600 mb-1">Log Page No</label>
                               <select
-                                value={entry.clear_reference.log_page || ''}
-                                onChange={(e) => handleInputChange(index, 'log_page', e.target.value, 'clear_reference')}
-                                className="border border-gray-300 rounded px-3 py-2 w-full"
-                                disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                                value={entry.defect_reference.log_page || ''}
+                                onChange={(e) => handleInputChange(index, 'log_page', e.target.value, 'defect_reference')}
+                                className={`border border-gray-300 rounded px-3 py-2 w-full ${
+                                  isCleared ? 'bg-gray-100 cursor-not-allowed' : ''
+                                }`}
+                                disabled={isCleared || authorizedEntries.includes(index) || clearedEntries.includes(index)}
                               >
                                 <option value="">Select Log Page</option>
                                 {logs.map((log) => (
@@ -896,15 +933,17 @@ export default function DeferralsForm() {
                             <div className="flex flex-col w-[100px]">
                               <label className="text-sm font-medium text-gray-600 mb-1">Item No</label>
                               <select
-                                value={entry.clear_reference.log_item_no || ''}
-                                onChange={(e) => handleInputChange(index, 'log_item_no', e.target.value, 'clear_reference')}
-                                className="border border-gray-300 rounded px-3 py-2 w-full"
-                                disabled={authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                                value={entry.defect_reference.log_item_no || ''}
+                                onChange={(e) => handleInputChange(index, 'log_item_no', e.target.value, 'defect_reference')}
+                                className={`border border-gray-300 rounded px-3 py-2 w-full ${
+                                  isCleared ? 'bg-gray-100 cursor-not-allowed' : ''
+                                }`}
+                                disabled={isCleared || authorizedEntries.includes(index) || clearedEntries.includes(index)}
                               >
                                 <option value="">Select Item</option>
-                                {entry.clear_reference.log_page &&
+                                {entry.defect_reference.log_page &&
                                   logs
-                                    .find((log) => log.logPageNo === entry.clear_reference.log_page)
+                                    .find((log) => log.logPageNo === entry.defect_reference.log_page)
                                     ?.items.map((item) => (
                                       <option key={item.id} value={item.id}>
                                         {item.displayNumber}
@@ -913,41 +952,165 @@ export default function DeferralsForm() {
                               </select>
                             </div>
                           </div>
+                          <div className="flex flex-col col-span-2">
+                            <label className="text-sm font-medium text-gray-600 mb-1">MEL/CD Ref (If Any)</label>
+                            <input
+                              type="text"
+                              value={entry.defect_reference.mel_cd_ref || ''}
+                              onChange={(e) => handleInputChange(index, 'mel_cd_ref', e.target.value, 'defect_reference')}
+                              className={`border border-gray-300 rounded px-3 py-2 w-full ${
+                                isCleared ? 'bg-gray-100 cursor-not-allowed' : ''
+                              }`}
+                              disabled={isCleared || authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                            />
+                          </div>
                           <div className="flex gap-3 col-span-2">
-                            <label className="font-medium text-gray-700">Cleared / Consolidated By :</label>
-                            <div className="break-words">{entry.clearedAuth || '—'}</div>
+                            <div className="flex flex-col w-[120px]">
+                              <label className="text-sm font-medium text-gray-600 mb-1">MEL Cat</label>
+                              <select
+                                value={entry.defect_reference.mel_cat || ''}
+                                onChange={(e) => handleInputChange(index, 'mel_cat', e.target.value, 'defect_reference')}
+                                className={`border border-gray-300 rounded px-3 py-2 w-full ${
+                                  isCleared ? 'bg-gray-100 cursor-not-allowed' : ''
+                                }`}
+                                disabled={isCleared || authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                              >
+                                <option value="">—</option>
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C">C</option>
+                                <option value="D">D</option>
+                                <option value="U">U</option>
+                              </select>
+                            </div>
+                            <div className="flex flex-col flex-1">
+                              <label className="text-sm font-medium text-gray-600 mb-1">Date</label>
+                              <input
+                                type="date"
+                                value={entry.defect_reference.date || ''}
+                                onChange={(e) => handleInputChange(index, 'date', e.target.value, 'defect_reference')}
+                                className={`border border-gray-300 rounded px-3 py-2 w-full ${
+                                  isCleared ? 'bg-gray-100 cursor-not-allowed' : ''
+                                }`}
+                                disabled={isCleared || authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                              />
+                            </div>
                           </div>
                         </div>
-                        <div className="col-span-6 flex justify-center space-x-4 mt-2">
-                          {!clearedEntries.includes(index) && (
+                      </td>
+                      <td className="p-3 align-top border-t border-gray-300">
+                        <textarea
+                          className={`w-full min-w-[250px] md:min-w-[400px] h-54 border-2 border-[#004051] rounded-md p-2 text-md focus:outline-none focus:ring-2 focus:ring-[#004051]/30 ${
+                            isCleared ? 'bg-gray-100 cursor-not-allowed' : ''
+                          }`}
+                          placeholder="Enter description..."
+                          value={entry.description}
+                          onChange={(e) => handleInputChange(index, 'description', e.target.value)}
+                          disabled={isCleared || authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                        />
+                        {descriptionErrors[index] && (
+                          <p className="text-red-600 text-sm mt-1">{descriptionErrors[index]}</p>
+                        )}
+                        <button
+                          onClick={() => openHistoryModal(index)}
+                          className="mt-2 bg-[#06b6d4] text-white px-4 py-1 text-sm rounded-md font-medium hover:bg-[#005b6b] transition"
+                        >
+                          View History
+                        </button>
+                      </td>
+                      <td className="p-3 align-top border-t border-gray-300">
+                        <div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="flex gap-3 col-span-2">
+                              <div className="flex flex-col flex-1 w-full">
+                                <label className="text-sm font-medium text-gray-600 mb-1">Date</label>
+                                <input
+                                  type="date"
+                                  value={entry.clear_reference.date || ''}
+                                  onChange={(e) => handleInputChange(index, 'date', e.target.value, 'clear_reference')}
+                                  className={`border border-gray-300 rounded px-3 py-2 w-full ${
+                                    isCleared ? 'bg-gray-100 cursor-not-allowed' : ''
+                                  }`}
+                                  disabled={isCleared || authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                                />
+                              </div>
+                            </div>
+                            <div className="flex gap-3 col-span-2">
+                              <div className="flex flex-col w-[180px]">
+                                <label className="text-sm font-medium text-gray-600 mb-1">Log Page No</label>
+                                <select
+                                  value={entry.clear_reference.log_page || ''}
+                                  onChange={(e) => handleInputChange(index, 'log_page', e.target.value, 'clear_reference')}
+                                  className={`border border-gray-300 rounded px-3 py-2 w-full ${
+                                    isCleared ? 'bg-gray-100 cursor-not-allowed' : ''
+                                  }`}
+                                  disabled={isCleared || authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                                >
+                                  <option value="">Select Log Page</option>
+                                  {logs.map((log) => (
+                                    <option key={log.id} value={log.logPageNo}>
+                                      {log.logPageNo}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex flex-col w-[100px]">
+                                <label className="text-sm font-medium text-gray-600 mb-1">Item No</label>
+                                <select
+                                  value={entry.clear_reference.log_item_no || ''}
+                                  onChange={(e) => handleInputChange(index, 'log_item_no', e.target.value, 'clear_reference')}
+                                  className={`border border-gray-300 rounded px-3 py-2 w-full ${
+                                    isCleared ? 'bg-gray-100 cursor-not-allowed' : ''
+                                  }`}
+                                  disabled={isCleared || authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                                >
+                                  <option value="">Select Item</option>
+                                  {entry.clear_reference.log_page &&
+                                    logs
+                                      .find((log) => log.logPageNo === entry.clear_reference.log_page)
+                                      ?.items.map((item) => (
+                                        <option key={item.id} value={item.id}>
+                                          {item.displayNumber}
+                                        </option>
+                                      ))}
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex gap-3 col-span-2">
+                              <label className="font-medium text-gray-700">Cleared / Consolidated By :</label>
+                              <div className="break-words">{entry.clearedAuth || '—'}</div>
+                            </div>
+                          </div>
+                          <div className="col-span-6 flex justify-center space-x-4 mt-2">
+                            {!clearedEntries.includes(index) && !isCleared && (
+                              <button
+                                onClick={() => openModal(index, 'cleared')}
+                                className="bg-[#004051] text-white px-6 py-1.5 text-sm rounded-md hover:bg-[#003040] transition disabled:opacity-50 flex items-center gap-2"
+                                disabled={actionLoading[index]?.auth}
+                              >
+                                {actionLoading[index]?.auth ? (
+                                  <>
+                                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Authorizing...
+                                  </>
+                                ) : (
+                                  'Auth'
+                                )}
+                              </button>
+                            )}
                             <button
-                              onClick={() => openModal(index, 'cleared')}
-                              className="bg-[#004051] text-white px-6 py-1.5 text-sm rounded-md hover:bg-[#003040] transition disabled:opacity-50 flex items-center gap-2"
-                              disabled={actionLoading[index]?.auth}
+                              onClick={() => handleCopy(index)}
+                              className="bg-[#06b6d4] text-white px-4 py-1 text-sm rounded-md font-medium hover:bg-[#005b6b] transition disabled:opacity-50 flex items-center gap-2"
+                              disabled={isCleared || actionLoading[index]?.copy}
                             >
-                              {actionLoading[index]?.auth ? (
+                              {actionLoading[index]?.copy ? (
                                 <>
                                   <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                  </svg>
-                                  Authorizing...
-                                </>
-                              ) : (
-                                'Auth'
-                              )}
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleCopy(index)}
-                            className="bg-[#06b6d4] text-white px-4 py-1 text-sm rounded-md font-medium hover:bg-[#005b6b] transition disabled:opacity-50 flex items-center gap-2"
-                            disabled={actionLoading[index]?.copy}
-                          >
-                            {actionLoading[index]?.copy ? (
-                              <>
-                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
                                 Copying...
                               </>
@@ -958,7 +1121,7 @@ export default function DeferralsForm() {
                           <button
                             onClick={() => removeEntry(index)}
                             className="bg-red-600 text-white px-4 py-1 text-sm rounded-md font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2"
-                            disabled={actionLoading[index]?.remove}
+                            disabled={isCleared || actionLoading[index]?.remove}
                           >
                             {actionLoading[index]?.remove ? (
                               <>
@@ -976,8 +1139,10 @@ export default function DeferralsForm() {
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
+                );
+              })
+              )
+            }
             </tbody>
           </table>
         </div>
@@ -1110,6 +1275,69 @@ export default function DeferralsForm() {
                 ) : (
                   'Auth'
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center items-start pt-20 sm:pt-16 z-50 overflow-y-auto h-screen">
+          <div
+            className="bg-white rounded-lg p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-lg border-t-4 border-yellow-500"
+            style={{ marginTop: '100px', marginBottom: '50px', marginLeft: '20px', marginRight: '20px' }}
+          >
+            <h2 className="text-xl font-semibold mb-4">History</h2>
+            {tempHistory.length === 0 ? (
+              <p className="text-sm text-gray-600 mb-4">No history items available.</p>
+            ) : (
+              tempHistory.map((item, histIndex) => (
+                <div key={histIndex} className="mb-4 border-b pb-4">
+                  <h3 className="text-md font-semibold text-gray-700 mb-2">{histIndex + 1}.</h3>
+                  <div className="flex flex-col mb-2">
+                    <label className="text-sm font-medium text-gray-600 mb-1">Raised</label>
+                    <input
+                      type="text"
+                      value={item.raised}
+                      onChange={(e) => updateHistoryItem(histIndex, 'raised', e.target.value)}
+                      className="border border-gray-300 rounded px-3 py-2"
+                    />
+                  </div>
+                  <div className="flex flex-col mb-2">
+                    <label className="text-sm font-medium text-gray-600 mb-1">Worked</label>
+                    <textarea
+                      value={item.worked}
+                      onChange={(e) => updateHistoryItem(histIndex, 'worked', e.target.value)}
+                      className="border border-gray-300 rounded px-3 py-2 h-24"
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeHistoryItem(histIndex)}
+                    className="bg-red-600 text-white px-3 py-1 rounded text-sm"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))
+            )}
+            <button
+              onClick={addNewHistoryItem}
+              className="bg-[#004051] text-white px-4 py-1 rounded mb-4"
+            >
+              + Add New Raised
+            </button>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setHistoryModal(null)}
+                className="bg-gray-300 text-gray-800 px-4 py-1 rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveHistory}
+                className="bg-[#06b6d4] text-white px-4 py-1 rounded"
+              >
+                Save
               </button>
             </div>
           </div>
