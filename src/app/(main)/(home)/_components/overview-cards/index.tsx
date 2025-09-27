@@ -1,14 +1,38 @@
 import { compactFormat } from "@/lib/format-number";
 import { getOverviewData } from "../../fetch";
-import MainHero from "./hero";
 import HeroAsside from "./heroasside";
 import { requireAuth } from "@/lib/auth";
 import * as icons from "./icons";
 import Link from "next/link";
 
+interface Flight {
+  id: string;
+  fltNo: string;
+  takeOffDate: string;
+  currentFlight: boolean;
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+
 export async function OverviewCardsGroup() {
   await requireAuth();
   const { views, profit, products, users } = await getOverviewData();
+
+  // 🔹 Fetch flights
+  let previousFlights: Flight[] = [];
+  let nextFlights: Flight[] = [];
+  try {
+    const res = await fetch(`${API_BASE}/flights`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
+
+    const flights: Flight[] = await res.json();
+    const today = new Date("2025-09-27");
+
+    previousFlights = flights.filter(flight => new Date(flight.takeOffDate) < today);
+    nextFlights = flights.filter(flight => new Date(flight.takeOffDate) >= today);
+  } catch (err) {
+    console.error("Failed to fetch flights:", err);
+  }
 
   const summaryData = [
     { label: 'Documents', value: 128, imagePath: '/images/cover/details.png', border: 'border-blue-500', link: '/documents/' },
@@ -18,13 +42,10 @@ export async function OverviewCardsGroup() {
     { label: 'Deferral', value: 6, imagePath: '/images/cover/deferal.png', border: 'border-cyan-500', link: '/deferral' },
   ];
 
-
   return (
     <>
       {/* Hero Section + Plane + HeroAsside */}
       <div className="space-y-6 mb-4">
-        {/* <MainHero /> */}
-
         <div className="w-full">
           <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
             {/* Plane Image */}
@@ -35,7 +56,6 @@ export async function OverviewCardsGroup() {
                 className="w-full max-w-[180px] h-auto object-contain rounded-2xl"
               />
             </div>
-
 
             {/* Hero Asside */}
             <div className="w-full xl:flex-1">
@@ -82,8 +102,16 @@ export async function OverviewCardsGroup() {
       {/* Flight History */}
       <div className="w-full mt-10">
         <div className="bg-white py-6 px-6 rounded-xl border border-gray-200 shadow-sm">
-          <h2 className="text-lg font-semibold text-custom-blue mb-6">Flight History</h2>
-
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-semibold text-custom-blue">Flight History</h2>
+            <Link
+              href="http://localhost:3000/flights"
+              className="px-3 py-1 sm:px-4 sm:py-1 bg-[#004051] hover:bg-[#00363f] text-white font-semibold rounded-md transition text-sm sm:text-base flex items-center gap-1"
+            >
+              <span className="hidden sm:inline">View All</span>
+              <span className="sm:hidden">All</span>
+            </Link>
+          </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {/* Previous Flights */}
             <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
@@ -95,21 +123,31 @@ export async function OverviewCardsGroup() {
                   <tr>
                     <th className="px-4 py-2 border-b">Flight No</th>
                     <th className="px-4 py-2 border-b">Time</th>
+                    <th className="px-4 py-2 border-b">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td className="px-4 py-2 border-b">XYZ123</td>
-                    <td className="px-4 py-2 border-b">12 Jun 2025 - 08:00 AM</td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 border-b">DEF789</td>
-                    <td className="px-4 py-2 border-b">10 Jun 2025 - 06:30 PM</td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 border-b">XYZ123</td>
-                    <td className="px-4 py-2 border-b">12 Jun 2025 - 08:00 AM</td>
-                  </tr>
+                  {previousFlights.length > 0 ? (
+                    previousFlights.map(flight => (
+                      <tr key={flight.id}>
+                        <td className="px-4 py-2 border-b">{flight.fltNo}</td>
+                        <td className="px-4 py-2 border-b">{flight.takeOffDate}</td>
+                        <td className="px-4 py-2 border-b">
+                          {flight.currentFlight && (
+                            <span className="px-3 py-1 text-sm text-[#06b6d4] font-semibold bg-[#06b6d4]/10 border border-[#06b6d4] rounded-full">
+                              Current Flight
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-2 border-b text-center text-gray-500">
+                        No previous flights found.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -124,28 +162,37 @@ export async function OverviewCardsGroup() {
                   <tr>
                     <th className="px-4 py-2 border-b">Flight No</th>
                     <th className="px-4 py-2 border-b">Time</th>
+                    <th className="px-4 py-2 border-b">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td className="px-4 py-2 border-b">ABC456</td>
-                    <td className="px-4 py-2 border-b">17 Jun 2025 - 03:45 PM</td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 border-b">LMN999</td>
-                    <td className="px-4 py-2 border-b">20 Jun 2025 - 09:15 AM</td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 border-b">ABC456</td>
-                    <td className="px-4 py-2 border-b">17 Jun 2025 - 03:45 PM</td>
-                  </tr>
+                  {nextFlights.length > 0 ? (
+                    nextFlights.map(flight => (
+                      <tr key={flight.id}>
+                        <td className="px-4 py-2 border-b">{flight.fltNo}</td>
+                        <td className="px-4 py-2 border-b">{flight.takeOffDate}</td>
+                        <td className="px-4 py-2 border-b">
+                          {flight.currentFlight && (
+                            <span className="px-3 py-1 text-sm text-[#06b6d4] font-semibold bg-[#06b6d4]/10 border border-[#06b6d4] rounded-full">
+                              Current Flight
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-2 border-b text-center text-gray-500">
+                        No upcoming flights found.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
       </div>
-
     </>
   );
 }

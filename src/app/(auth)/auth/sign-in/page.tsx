@@ -28,7 +28,7 @@ export default function SignIn() {
               </Link> */}
               <Image 
                   className="hidden dark:block mx-auto mb-4"
-                  src={"/images/logo/picture1.png"}
+                  src={"/images/logo/Picture1.png"}
                   width={176}
                   height={32}
                   alt="ELB Logo"
@@ -37,7 +37,7 @@ export default function SignIn() {
                 />
                 <Image
                   className="dark:hidden mx-auto mb-4"
-                  src={"/images/logo/picture1.png"}
+                  src={"/images/logo/Picture1.png"}
                   alt="ELB Logo"
                   width={176}
                   height={32}

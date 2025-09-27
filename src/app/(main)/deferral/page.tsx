@@ -1121,7 +1121,6 @@ export default function DeferralsForm() {
                           <button
                             onClick={() => removeEntry(index)}
                             className="bg-red-600 text-white px-4 py-1 text-sm rounded-md font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2"
-                            disabled={isCleared || actionLoading[index]?.remove}
                           >
                             {actionLoading[index]?.remove ? (
                               <>

@@ -20,6 +20,7 @@ interface Flight {
   to: string;
   takeOffDate: string;
   flightTime: string;
+  currentFlight: boolean;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -60,12 +61,8 @@ export default function FlightListPage() {
       if (!res.ok) throw new Error("Failed to delete");
 
       setFlights(prev => prev.filter(f => f.id !== id));
-      // Show inline success message
       setMessage({ text: 'Flight deleted successfully!', type: 'success' });
-
-      // Hide after 1.5 seconds
       setTimeout(() => setMessage(null), 1500);
-
     } catch (err) {
       console.error("Delete failed:", err);
       setMessage({ text: 'Error deleting Flight', type: 'error' });
@@ -78,6 +75,31 @@ export default function FlightListPage() {
     router.push(`/flights/edit/${id}`);
   }
 
+  // 🔹 Make current flight handler
+  async function handleMakeCurrent(id: string) {
+    try {
+      const res = await fetch(`${API_BASE}/flights/${id}/make-current`, {
+        method: 'PATCH',
+      });
+      if (!res.ok) throw new Error("Failed to set current flight");
+
+      // Update flights state to reflect the new current flight
+      setFlights(prev =>
+        prev.map(flight =>
+          flight.id === id
+            ? { ...flight, currentFlight: true }
+            : { ...flight, currentFlight: false }
+        )
+      );
+      setMessage({ text: 'Flight set as current!', type: 'success' });
+      setTimeout(() => setMessage(null), 1500);
+    } catch (err) {
+      console.error("Failed to set current flight:", err);
+      setMessage({ text: 'Error setting current flight', type: 'error' });
+      setTimeout(() => setMessage(null), 2000);
+    }
+  }
+
   function handleAddNew() {
     router.push('/flights/create');
   }
@@ -87,17 +109,17 @@ export default function FlightListPage() {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg sm:text-xl font-semibold text-[#004051] flex items-center gap-2">
           <MdFlightTakeoff className="text-base sm:text-xl" />
-          <span className="sm:hidden">Flights</span>         {/* mobile */}
-          <span className="hidden sm:inline">Previous Flights</span> {/* desktop */}
+          <span className="sm:hidden">Flights</span>
+          <span className="hidden sm:inline">Previous Flights</span>
         </h2>
 
         <button
           onClick={handleAddNew}
           className="px-3 py-1 sm:px-4 sm:py-2 bg-[#004051] hover:bg-[#00363f] text-white font-semibold rounded-md transition text-sm sm:text-base flex items-center gap-1"
         >
-          <MdFlightTakeoff className="text-sm sm:text-base" /> {/* your icon */}
-          <span className="sm:hidden">+ Add</span>            {/* mobile */}
-          <span className="hidden sm:inline">+ Add New Flight</span> {/* desktop */}
+          <MdFlightTakeoff className="text-sm sm:text-base" />
+          <span className="sm:hidden">+ Add</span>
+          <span className="hidden sm:inline">+ Add New Flight</span>
         </button>
       </div>
 
@@ -106,7 +128,7 @@ export default function FlightListPage() {
           className={`md:col-span-2 mb-4 px-4 py-3 rounded-lg text-base font-semibold text-white shadow-lg transition-all duration-300 ${
             message.type === 'success' ? 'bg-[#06b6d4]' : 'bg-red-700'
           }`}
-        > 
+        >
           {message.text}
         </div>
       )}
@@ -137,10 +159,24 @@ export default function FlightListPage() {
                     <TableCell>{flight.from} → {flight.to}</TableCell>
                     <TableCell>{flight.takeOffDate}</TableCell>
                     <TableCell>{flight.flightTime}</TableCell>
-                    <TableCell className="flex gap-2 justify-center">
+                    <TableCell className="flex gap-2 justify-center items-center">
+                      {flight.currentFlight ? (
+                        <span
+                          className="px-3 py-1 text-sm text-[#06b6d4] font-semibold bg-[#06b6d4]/10 border border-[#06b6d4] rounded-full"
+                        >
+                          Current Flight
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleMakeCurrent(flight.id)}
+                          className="px-3 py-1 text-sm bg-[#06b6d4] hover:bg-[#0891b2] text-white rounded-md"
+                        >
+                          Make Current
+                        </button>
+                      )}
                       <button
                         onClick={() => handleEdit(flight.id)}
-                        className="px-3 py-1 text-sm  bg-[#004051] hover:bg-[#006172]  hover:bg-blue-700 text-white rounded-md"
+                        className="px-3 py-1 text-sm bg-[#004051] hover:bg-[#006172] text-white rounded-md"
                       >
                         Edit
                       </button>
