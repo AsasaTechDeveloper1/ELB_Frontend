@@ -1,22 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import LogSection from './create/LogSection';
-import FlightDetailsSection from './create/FlightDetailsSection';
-import FluidsSection from './create/FluidsSection';
-import ChecksSection from './create/ChecksSection';
-import AuthModal from './create/AuthModal';
-import { LogEntry, AuthData } from './types';
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
+import LogSection from './LogSection';
+import AuthModal from './AuthModal'; 
+import { LogEntry, AuthData } from '../../types';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 const initialLogEntry: LogEntry = {
-  id: 1,
+  id: 0,
   updated_id: "",
   displayNumber: 1,
   class: '',
   raisedBy: '',
   defectDetails: '',
   mmsgFc: '',
-  ata: '',
+  ata: '',             // ✅ add this line
   sdr: false,
   actionDetails: '',
   ddChecked: false,
@@ -40,9 +39,13 @@ const initialLogEntry: LogEntry = {
   ddAuth1: '',
 };
 
+
 export default function FormElementsPage() {
+  const params = useParams(); 
+  const logId = params?.id as string;
+
   const [activeTab, setActiveTab] = useState('Log');
-  const [logEntries, setLogEntries] = useState<LogEntry[]>([{ ...initialLogEntry }]);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [authModal, setAuthModal] = useState<null | { type: string; index: number }>(null);
   const [checkedItems, setCheckedItems] = useState<{ [key: string]: boolean }>({});
   const [authDetails, setAuthDetails] = useState<Record<string, any>>({});
@@ -56,13 +59,46 @@ export default function FormElementsPage() {
   });
   const [descriptionErrors, setDescriptionErrors] = useState<string[]>([]);
   const [showError, setShowError] = useState(false);
-  const [showLogListModal, setShowLogListModal] = useState(false);
-  const [selectedLogIndex, setSelectedLogIndex] = useState<number>(0);
+
+  // 🔹 Fetch log by ID
+  useEffect(() => {
+    if (!logId) return;
+
+const fetchLog = async () => {
+  try {
+    const res = await fetch(`${API_BASE}/logs/${logId}`);
+    if (!res.ok) throw new Error('Failed to fetch log');
+    const data = await res.json();
+    console.log(data, "fetch data");
+
+    // ✅ Normalize items array into LogEntry[]
+    const normalizedEntries: LogEntry[] = (data.items || []).map((item: any) => ({
+      ...initialLogEntry,
+      ...item,
+      ata: item.ata ?? initialLogEntry.ata,
+      mmsgFc: item.mmsgFc ?? initialLogEntry.mmsgFc,
+      componentRows: item.components?.length
+        ? item.components
+        : initialLogEntry.componentRows,
+    }));
+
+
+    console.log(normalizedEntries,"normalizedEntries")
+    setLogEntries(normalizedEntries.length ? normalizedEntries : [initialLogEntry]);
+  } catch (err) {
+    console.error('❌ Error fetching log:', err);
+    setLogEntries([{ ...initialLogEntry, id: 0 }]);
+  }
+};
+
+
+    fetchLog();
+  }, [logId]);
 
   const openAuthModal = (type: string, index: number) => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toISOString().split('T')[0];
     const entry = logEntries[index];
-    const description = entry.actionDetails; 
+    const description = entry.actionDetails;
 
     if ((type === 'Short Sign Auth' || type === 'Action Auth') && (!description || description.trim() === '')) {
       const updatedErrors = [...descriptionErrors];
@@ -99,8 +135,8 @@ export default function FormElementsPage() {
     }
 
     setLogEntries(updated);
-   
-    setAuthDetails(prev => ({
+
+    setAuthDetails((prev) => ({
       ...prev,
       [authModal.type]: {
         authId: authData.authId,
@@ -113,7 +149,7 @@ export default function FormElementsPage() {
       },
     }));
 
-    setCheckedItems(prev => ({
+    setCheckedItems((prev) => ({
       ...prev,
       [authModal.type]: true,
     }));
@@ -123,11 +159,6 @@ export default function FormElementsPage() {
   };
 
   const tabs = [
-    {
-      id: 'FLT DETAILS/RELEASE',
-      label: 'FLT DETAILS/RELEASE',
-      content: <FlightDetailsSection />,
-    },
     {
       id: 'Log',
       label: 'Log',
@@ -143,50 +174,13 @@ export default function FormElementsPage() {
         />
       ),
     },
-    {
-      id: 'Fluids',
-      label: 'Fluids',
-      content: <FluidsSection />,
-    },
-    {
-      id: 'Checks',
-      label: 'Checks',
-      content: <ChecksSection 
-        openAuthModal={openAuthModal}
-        checkedItems={checkedItems} 
-        setCheckedItems={setCheckedItems} 
-        authDetails={authDetails} 
-        setAuthDetails={setAuthDetails} 
-      />,
-    },
   ];
-
-  const handleViewList = () => {
-    setShowLogListModal(true);
-  };
-
-  const handleAddNewLog = () => {
-    const newLog = { ...initialLogEntry, id: logEntries.length + 1, displayNumber: logEntries.length + 1 };
-    setLogEntries([...logEntries, newLog]);
-    setSelectedLogIndex(logEntries.length);
-    setActiveTab('Log');
-  };
-
-  const handleSelectLog = (index: number) => {
-    setSelectedLogIndex(index);
-    setShowLogListModal(false);
-    setActiveTab('Log');
-  };
-
-  const closeLogListModal = () => {
-    setShowLogListModal(false);
-  };
 
   const activeContent = tabs.find((tab) => tab.id === activeTab)?.content;
 
   return (
     <div className="space-y-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6">
         <ul className="flex gap-2 overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <li
@@ -202,20 +196,6 @@ export default function FormElementsPage() {
             </li>
           ))}
         </ul>
-        <div className="flex gap-2">
-          <button
-            className="px-4 py-2 bg-[rgb(0,64,81)] text-white rounded-md hover:bg-[rgb(0,80,100)] transition-all"
-            onClick={handleViewList}
-          >
-            View List
-          </button>
-          <button
-            className="px-4 py-2 bg-[rgb(0,64,81)] text-white rounded-md hover:bg-[rgb(0,80,100)] transition-all"
-            onClick={handleAddNewLog}
-          >
-            Add New Log
-          </button>
-        </div>
       </div>
       <div>{activeContent}</div>
       <AuthModal
@@ -226,52 +206,6 @@ export default function FormElementsPage() {
         saveAuthorization={saveAuthorization}
         setCheckedItems={setCheckedItems}
       />
-      {showLogListModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-5 w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-lg border-t-4 border-yellow-500">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Log Entries</h2>
-              <button
-                className="text-gray-500 hover:text-gray-700"
-                onClick={closeLogListModal}
-              >
-                ✕
-              </button>
-            </div>
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-[rgb(0,64,81)] text-white">
-                  <th className="p-3 text-left">Date</th>
-                  <th className="p-3 text-left">Log Page Number</th>
-                  <th className="p-3 text-left">Flight Leg</th>
-                  <th className="p-3 text-left">Flight No</th>
-                  <th className="p-3 text-left">Sector</th>
-                  <th className="p-3 text-left">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logEntries.map((entry, index) => (
-                  <tr key={entry.id} className="border-b border-gray-200 hover:bg-gray-100">
-                    <td className="p-3">{entry.date || 'N/A'}</td>
-                    <td className="p-3">{entry.displayNumber}</td>
-                    <td className="p-3">0</td>
-                    <td className="p-3">EK0824</td>
-                    <td className="p-3">DMM (ETD 01:15, 7 Mar 25) → DXB (ETA 02:17, 7 Mar 25)</td>
-                    <td className="p-3">
-                      <button
-                        className="px-3 py-1 bg-[rgb(0,64,81)] text-white rounded-md hover:bg-[rgb(0,80,100)] transition-all"
-                        onClick={() => handleSelectLog(index)}
-                      >
-                        Select
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

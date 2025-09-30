@@ -1,0 +1,181 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { MdAssignment } from 'react-icons/md';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+interface Log {
+  id: string;
+  logPageNo: string;
+  status: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+export default function LogListPage() {
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const router = useRouter();
+  
+  // 🔹 Fetch logs in descending order by createdAt for 0-based indexing
+  useEffect(() => {
+    async function fetchLogs() {
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/logs`);
+        if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
+
+        const data = await res.json();
+        // Sort logs by createdAt in descending order
+        const sortedLogs = Array.isArray(data) 
+          ? data.sort((a: Log, b: Log) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          : [];
+        setLogs(sortedLogs);
+      } catch (err) {
+        console.error("Failed to fetch logs:", err);
+        setLogs([]);
+        setMessage({ text: "Failed to load logs ❌", type: "error" });
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchLogs();
+  }, []);
+
+  function formatDate(date: string | { _seconds: number; _nanoseconds: number }): string {
+    if (!date) return "-";
+    if (typeof date === "string") return new Date(date).toLocaleString();
+    return new Date(date._seconds * 1000).toLocaleString();
+  }
+
+  // 🔹 Delete handler
+  async function handleDelete(id: string) {
+    if (!confirm("Are you sure you want to delete this log?")) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/logs/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+
+      setLogs(prev => prev.filter(l => l.id !== id));
+      setMessage({ text: 'Log deleted successfully!', type: 'success' });
+
+      setTimeout(() => setMessage(null), 1500);
+    } catch (err) {
+      console.error("Delete failed:", err);
+      setMessage({ text: 'Error deleting log', type: 'error' });
+      setTimeout(() => setMessage(null), 2000);
+    }
+  }
+
+  // 🔹 Navigate to edit form
+  function handleEdit(id: string) {
+    router.push(`/logs/edit/${id}`);
+  }
+
+  function handleAddNew() {
+    router.push('/logs/create');
+  }
+
+  return (
+    <div className="bg-white p-6 shadow rounded-xl">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg sm:text-xl font-semibold text-[#004051] flex items-center gap-2">
+          <MdAssignment className="text-base sm:text-xl" />
+          <span className="sm:hidden">Logs</span>        
+          <span className="hidden sm:inline">Previous Logs</span> 
+        </h2>
+
+        <button
+          onClick={handleAddNew}
+          className="px-3 py-1 sm:px-4 sm:py-2 bg-[#004051] hover:bg-[#00363f] text-white font-semibold rounded-md transition text-sm sm:text-base flex items-center gap-1"
+        >
+          <MdAssignment className="text-sm sm:text-base" /> 
+          <span className="sm:hidden">+ Add</span>            
+          <span className="hidden sm:inline">+ Add New Log</span> 
+        </button>
+      </div>
+
+      {message && (
+        <div
+          className={`md:col-span-2 mb-4 px-4 py-3 rounded-lg text-base font-semibold text-white shadow-lg transition-all duration-300 ${
+            message.type === 'success' ? 'bg-[#06b6d4]' : 'bg-red-700'
+          }`}
+        > 
+          {message.text}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center items-center py-4">
+          <svg className="animate-spin h-5 w-5 text-gray-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <p className="text-gray-600">Loading logs...</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[50px] text-center text-gray-700 whitespace-nowrap">Flight Leg</TableHead>
+                <TableHead className="text-gray-700">Date</TableHead>
+                <TableHead className="text-gray-700">Log Page No</TableHead>
+                <TableHead className="text-gray-700">Flight No</TableHead>
+                <TableHead className="text-gray-700">Sector</TableHead>
+                <TableHead className="text-gray-700 text-center">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {logs.length > 0 ? (
+                logs.map((log, index) => (
+                  <TableRow key={log.id} className="text-gray-800">
+                    <TableCell className="text-center">
+                      {index === 0 ? 0 : -index}
+                    </TableCell>
+                    <TableCell>{formatDate(log.createdAt)}</TableCell>
+                    <TableCell>{log.logPageNo}</TableCell>
+                    <TableCell>EK0824</TableCell>
+                    <TableCell>DMM (ETD 01:15, 7 Mar 25) → DXB (ETA 02:17, 7 Mar 25)</TableCell>
+                    <TableCell className="flex gap-2 justify-center">
+                      <button
+                        onClick={() => handleEdit(log.id)}
+                        className="px-3 py-1 text-sm bg-[#004051] hover:bg-[#006172] text-white rounded-md"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(log.id)}
+                        className="px-3 py-1 text-sm bg-red-600 hover:bg-red-700 text-white rounded-md"
+                      >
+                        Delete
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-gray-500 py-4">
+                    No logs found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}

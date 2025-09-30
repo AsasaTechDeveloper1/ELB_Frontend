@@ -359,30 +359,22 @@ export default function LogSection({
               <button
                 className="text-white font-semibold px-4 py-1 rounded-md shadow-sm hover:bg-[#003340] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 style={{ backgroundColor: '#004051' }}
-                onClick={addNewLogEntry}
+                onClick={handleSave}
+                disabled={isSaving}
               >
-                + Add Entry
+                {isSaving ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
               </button>
             </div>
-          </div>
-        </header>
-        <header className="sticky top-0 z-20 border-b-2 mt-2 border-[#004051] pb-2 pr-4 bg-white">
-          <div className="flex items-center justify-between">
-            <span className="font-medium text-gray-800 uppercase">
-                 Date: today date
-            </span>
-                |
-            <span className="font-medium text-gray-800 uppercase">
-                 Flight Leg: 01 
-            </span>
-                |
-            <span className="font-medium text-gray-800 uppercase">
-                Flight No: EK0824 
-            </span>
-                |
-            <span className="font-medium text-gray-800 uppercase">
-                Sector: DMM (ETD 01:15, 7 Mar 25) → DXB (ETA 02:17, 7 Mar 25)
-            </span>
           </div>
         </header>
 
@@ -825,23 +817,30 @@ export default function LogSection({
                     <button
                       onClick={() => addComponentRow(index)}
                       type="button"
-                      className="bg-[#004051] w-30 text-white text-sm font-medium py-2 px-3 mr-2 rounded shadow transition hover:bg-[#00363f]"
+                      className="bg-[#004051] text-white text-sm font-medium py-1 px-3 mr-2 rounded shadow transition w-auto md:w-auto hover:bg-[#00363f]"
                     >
                       + Add New
                     </button>
-                    {/* <button
+                    <button
                       onClick={() => removeLogEntry(index)}
                       className={`bg-red-600 text-white px-3 py-1 text-sm rounded-md font-medium mt-2 ${isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'}`}
                       disabled={!!isFullyAuthorized}
                     >
                       Remove Log
-                    </button> */}
+                    </button>
                   </div>
                 </div>
               </div>
             );
           })}
-          
+          <div className="flex justify-center mb-4">
+            <button
+              onClick={addNewLogEntry}
+              className={`bg-[#004051] text-white px-4 py-2 rounded-md font-medium text-sm hover:bg-[#006172]`}
+            >
+              + Add New Log
+            </button>
+          </div>
           <div className="bg-[#f0fafa] border border-[#004051] rounded-lg p-3 shadow-sm mb-4">
             <h3 className="text-sm font-semibold text-[#004051] mb-1">📌 Note:</h3>
             <p className="text-md text-gray-800 leading-relaxed">

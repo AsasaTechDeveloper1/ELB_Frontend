@@ -1,8 +1,8 @@
 'use client';
 
+import { useParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { LogEntry, ComponentRow } from '../types';
+import { LogEntry, ComponentRow } from '../../types';
 
 interface LogSectionProps {
   logEntries: LogEntry[];
@@ -51,45 +51,32 @@ const initialLogEntry: LogEntry = {
 // Function to increment type_no (e.g., DEF-00002 -> DEF-00003)
 const incrementTypeNo = (lastTypeNo: string): string => {
   if (!lastTypeNo || !lastTypeNo.startsWith('DEF-')) {
-    return 'DEF-00001'; // Default if no valid type_no found
+    return 'DEF-00001';
   }
   const numericPart = parseInt(lastTypeNo.replace('DEF-', ''), 10);
   if (isNaN(numericPart)) {
-    return 'DEF-00001'; // Fallback if parsing fails
+    return 'DEF-00001';
   }
-  return `DEF-${String(numericPart + 1).padStart(5, '0')}`; // e.g., DEF-00003
+  return `DEF-${String(numericPart + 1).padStart(5, '0')}`;
 };
 
-// Fetch the latest type_no from deferrals
-const fetchLatestTypeNo = async (): Promise<string> => {
-  try {
-    const res = await fetch(`${API_BASE}/deferrals`);
-    if (!res.ok) throw new Error('Failed to fetch deferrals');
-    const deferrals = await res.json();
-    // Find the highest type_no
-    const latestDeferral = deferrals
-      .filter((d: any) => d.entries[0]?.defect_reference?.type_no)
-      .sort((a: any, b: any) =>
-        b.entries[0].defect_reference.type_no.localeCompare(a.entries[0].defect_reference.type_no)
-      )[0];
-    return latestDeferral?.entries[0]?.defect_reference?.type_no || 'DEF-00000';
-  } catch (error) {
-    console.error('❌ Error fetching deferrals:', error);
-    return 'DEF-00000'; // Fallback
-  }
+// Normalize functions to handle raw values from Firestore
+const normalizeDdAction = (action: string): string => {
+  if (action === 'R') return 'Raised (R)';
+  if (action === 'W') return 'Worked (W)';
+  if (action === 'C') return 'Cleared (C)';
+  return action || '';
 };
 
-// Normalize ddType to backend format (e.g., "Major (M)" -> "M")
-const normalizeDdType = (ddType: string): string => {
-  if (ddType === 'Major (M)') return 'M';
-  if (ddType === 'Minor (N)') return 'N';
-  return ddType || 'N'; // Default to 'N' if empty
+const normalizeDdType = (type: string): string => {
+  if (type === 'M') return 'Major (M)';
+  if (type === 'N') return 'Minor (N)';
+  return type || '';
 };
 
-// Normalize cat to backend format (e.g., "Cat A" -> "A")
-const normalizeMelCat = (cat: string): string => {
-  if (cat.startsWith('Cat ')) return cat.replace('Cat ', '');
-  return cat || ''; // Return as-is if not prefixed with "Cat "
+const normalizeCat = (cat: string): string => {
+  if (cat && ['A', 'B', 'C', 'D', 'U'].includes(cat)) return `Cat ${cat}`;
+  return cat || '';
 };
 
 export default function LogSection({
@@ -101,68 +88,74 @@ export default function LogSection({
   setShowError,
   openAuthModal,
 }: LogSectionProps) {
-  const router = useRouter();
-  const [logPageNo, setLogPageNo] = useState<string>(''); // Initial default, will be updated
-  const [isFetchingPageNo, setIsFetchingPageNo] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const params = useParams();
+  const logId = params?.id as string;
+  const [logPageNo, setLogPageNo] = useState<string>('');
+  const [isFetchingLog, setIsFetchingLog] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [fetchingDdIndices, setFetchingDdIndices] = useState<number[]>([]);
 
-  // Fetch existing logs to determine the next log page number
-  const fetchLogs = async () => {
-    setIsFetchingPageNo(true);
-    try {
-      const res = await fetch(`${API_BASE}/logs`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const data = await res.json();
-      if (res.ok) {
-        // Extract logPageNo from each log
-        const logPageNumbers = data.map((log: { logPageNo: string }) => log.logPageNo);
-        // Generate the next log page number
-        const nextLogPageNo = generateNextLogPageNo(logPageNumbers);
-        setLogPageNo(nextLogPageNo);
-      } else {
-        console.error('Failed to fetch logs:', data.error);
-      }
-    } catch (err: any) {
-      console.error('Error fetching logs:', err.message);
-    } finally {
-      setIsFetchingPageNo(false);
-    }
-  };
-
-  // Generate the next log page number based on existing ones
-  const generateNextLogPageNo = (existingPageNos: string[]): string => {
-    if (!existingPageNos || existingPageNos.length === 0) {
-      return 'LOG-00001'; // Default if no logs exist
-    }
-
-    // Extract numeric parts and find the maximum
-    const numbers = existingPageNos
-      .map((pageNo) => {
-        const match = pageNo.match(/^LOG-(\d+)$/);
-        return match ? parseInt(match[1], 10) : 0;
-      })
-      .filter((num) => !isNaN(num));
-
-    const maxNumber = numbers.length > 0 ? Math.max(...numbers) : 0;
-    const nextNumber = maxNumber + 1;
-    // Format as LOG-XXXXX (e.g., LOG-00002)
-    return `LOG-${nextNumber.toString().padStart(5, '0')}`;
-  };
-
-  // Fetch logs when the component mounts
+  // Fetch log data when component mounts
   useEffect(() => {
-    fetchLogs();
-  }, []);
+    const fetchLogData = async () => {
+      setIsFetchingLog(true);
+      try {
+        const res = await fetch(`${API_BASE}/logs/${logId}`);
+        if (!res.ok) throw new Error('Failed to fetch log data');
+        const data = await res.json();
+        setLogPageNo(data.logPageNo || 'LOG-00001');
+        if (data.items) {
+          // Sort entries by displayNumber in ascending order
+          const sortedEntries = data.items
+            .map((entry: any) => ({
+              ...initialLogEntry,
+              ...entry,
+              componentRows: entry.components || [initialLogEntry.componentRows[0]],
+              displayNumber: entry.displayNumber || 1,
+              ddAction: normalizeDdAction(entry.ddAction),
+              ddType: normalizeDdType(entry.ddType),
+              cat: normalizeCat(entry.cat),
+            }))
+            .sort((a: LogEntry, b: LogEntry) => a.displayNumber - b.displayNumber);
+          setLogEntries(sortedEntries);
+          setDescriptionErrors(new Array(sortedEntries.length).fill(''));
+        }
+      } catch (error) {
+        console.error('❌ Error fetching log data:', error);
+        setLogPageNo('LOG-00001');
+      } finally {
+        setIsFetchingLog(false);
+      }
+    };
+
+    if (logId) {
+      fetchLogData();
+    }
+  }, [logId, setLogEntries, setDescriptionErrors]);
+
+  // Fetch the latest type_no from deferrals
+  const fetchLatestTypeNo = async (): Promise<string> => {
+    try {
+      const res = await fetch(`${API_BASE}/deferrals`);
+      if (!res.ok) throw new Error('Failed to fetch deferrals');
+      const deferrals = await res.json();
+      const latestDeferral = deferrals
+        .filter((d: any) => d.entries?.[0]?.defect_reference?.type_no)
+        .sort((a: any, b: any) =>
+          a.entries[0].defect_reference.type_no.localeCompare(b.entries[0].defect_reference.type_no)
+        )[0];
+      return latestDeferral?.entries[0]?.defect_reference?.type_no || 'DEF-00000';
+    } catch (error) {
+      console.error('❌ Error fetching deferrals:', error);
+      return 'DEF-00000';
+    }
+  };
 
   // Handle input changes, including DD checkbox logic
   const handleLogInputChange = async (index: number, field: keyof LogEntry, value: string | boolean) => {
     const updatedEntries = [...logEntries];
     updatedEntries[index] = { ...updatedEntries[index], [field]: value };
 
-    // If DD checkbox is checked, fetch and increment type_no
     if (field === 'ddChecked' && value === true) {
       setFetchingDdIndices((prev) => [...prev, index]);
       try {
@@ -173,15 +166,14 @@ export default function LogSection({
         setFetchingDdIndices((prev) => prev.filter((i) => i !== index));
       }
     } else if (field === 'ddChecked' && value === false) {
-      // Clear ddNo when unchecking DD
       updatedEntries[index].ddNo = '';
     }
 
     setLogEntries(updatedEntries);
   };
 
-  const handleSave = async () => {
-    // Validate required fields
+  // Update existing log
+  const handleUpdate = async () => {
     const errors: string[] = [];
     logEntries.forEach((entry, index) => {
       if (!entry.raisedBy || !entry.actionDetails) {
@@ -197,79 +189,63 @@ export default function LogSection({
       return;
     }
 
-    setIsSaving(true);
-
-    // Prepare payload with normalized fields
-    const payload = {
-      logPageNo,
-      logEntries: logEntries.map((entry) => ({
-        id: entry.id || undefined, // Use undefined for new entries to let backend generate ID
-        class: entry.class,
-        raisedBy: entry.raisedBy,
-        defectDetails: entry.defectDetails,
-        actionDetails: entry.actionDetails,
-        ddChecked: entry.ddChecked,
-        ddAction: entry.ddAction,
-        ddType: normalizeDdType(entry.ddType),
-        ddNo: entry.ddNo,
-        melCdlRef: entry.melCdlRef,
-        cat: normalizeMelCat(entry.cat),
-        indInspChecked: entry.indInspChecked,
-        sdr: entry.sdr,
-        mmsgFc: entry.mmsgFc,
-        ata: entry.ata,
-        components: entry.componentRows,
-      })),
-      status: 1,
-      createdBy: 'user-id', // Replace with actual user ID from auth context
-    };
-
-    // Send data to backend
+    setIsUpdating(true);
     try {
-      console.log('📤 Saving logs:', payload);
-      const response = await fetch(`${API_BASE}/logs/save`, {
-        method: 'POST',
+      const payload = {
+        logEntries: logEntries.map((entry) => ({
+          ...entry,
+          components: entry.componentRows,
+          id: entry.id || undefined,
+          ddAction: normalizeDdAction(entry.ddAction),
+          ddType: normalizeDdType(entry.ddType),
+          cat: normalizeCat(entry.cat),
+        })),
+        status: 1,
+        updatedBy: 'user-id',
+      };
+
+      const res = await fetch(`${API_BASE}/logs/${logId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error('Failed to save logs');
+      if (!res.ok) throw new Error(`Failed to update log ${logId}`);
+      const data = await res.json();
+      console.log(`✅ Updated log ${logId}:`, data);
 
-      const data = await response.json();
-      console.log('✅ Saved successfully:', data);
-
-      // Update local state with new logItem IDs from the response
-      if (data.savedLogs) {
-        const updatedEntries = logEntries.map((entry, index) => ({
-          ...entry,
-          id: data.savedLogs[index]?.logItemId || entry.id,
-          displayNumber: entry.displayNumber || index + 1,
-        }));
+      if (data.newLogItems) {
+        const updatedEntries = data.newLogItems
+          .map((entry: any, index: number) => ({
+            ...logEntries[index],
+            id: entry.id || logEntries[index].id,
+            displayNumber: entry.displayNumber || index + 1,
+            ddAction: normalizeDdAction(entry.ddAction),
+            ddType: normalizeDdType(entry.ddType),
+            cat: normalizeCat(entry.cat),
+          }))
+          .sort((a: LogEntry, b: LogEntry) => a.displayNumber - b.displayNumber);
         setLogEntries(updatedEntries);
       }
 
+      setLogPageNo(data.logPageNo || logPageNo);
+      alert('Logs updated successfully!');
       setShowError(false);
-      alert('Logs saved successfully!');
-      router.push('/logs');
-
-      // Refresh log page number after saving
-      await fetchLogs();
     } catch (error) {
-      console.error('❌ Save error:', error);
-      alert('Error saving logs. Please try again.');
+      console.error('❌ Update error:', error);
+      alert('Error updating logs. Please try again.');
     } finally {
-      setIsSaving(false);
+      setIsUpdating(false);
     }
   };
 
+  // Add / remove log
   const addNewLogEntry = () => {
-    const newEntry = {
-      ...initialLogEntry,
-      id: 0,
-      displayNumber: logEntries.length + 1,
-      componentRows: [{ partNo: '', serialOn: '', partOff: '', serialOff: '', grn: '' }],
-    };
-    setLogEntries([...logEntries, newEntry]);
+    const newEntries = [
+      ...logEntries,
+      { ...initialLogEntry, id: 0, displayNumber: logEntries.length + 1 },
+    ];
+    setLogEntries(newEntries);
     setDescriptionErrors([...descriptionErrors, '']);
   };
 
@@ -282,9 +258,16 @@ export default function LogSection({
     setDescriptionErrors(updatedErrors);
   };
 
+  // Component rows
   const addComponentRow = (logIndex: number) => {
     const updatedEntries = [...logEntries];
-    updatedEntries[logIndex].componentRows.push({ partNo: '', serialOn: '', partOff: '', serialOff: '', grn: '' });
+    updatedEntries[logIndex].componentRows.push({
+      partNo: '',
+      serialOn: '',
+      partOff: '',
+      serialOff: '',
+      grn: '',
+    });
     setLogEntries(updatedEntries);
   };
 
@@ -305,31 +288,17 @@ export default function LogSection({
     setLogEntries(updatedEntries);
   };
 
-  const handleAuth = (index: number, date: string) => {
-    setLogEntries((prev) => {
-      const updated = [...prev];
-      updated[index].authenticated = true;
-      updated[index].date = date;
-      return updated;
-    });
-  };
-
   return (
     <div className="bg-gray-100 min-h-screen flex justify-center">
       <div className="bg-white border border-gray-200 rounded-lg p-4 shadow w-full max-w-[1200px] flex flex-col">
         {/* Sticky Header */}
         <header className="sticky top-0 z-20 border-b-2 border-[#004051] pb-2 pr-4 bg-white">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-[#004051] uppercase">
-              Defect & Action Log
-            </h1>
-
+            <h1 className="text-xl font-bold text-[#004051] uppercase">Defect & Action Log</h1>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-gray-800 uppercase">
-                  LOG PAGE NUMBER:
-                </span>
-                {isFetchingPageNo ? (
+                <span className="font-medium text-gray-800 uppercase">LOG PAGE NUMBER:</span>
+                {isFetchingLog ? (
                   <span className="text-sm font-semibold text-[#004051] bg-gray-100 border border-[#004051]/30 px-3 py-1 rounded-md shadow-sm uppercase animate-pulse">
                     Loading...
                   </span>
@@ -339,50 +308,25 @@ export default function LogSection({
                   </span>
                 )}
               </div>
-
-              <button
-                className="bg-[#06b6d4] flex items-center gap-2 text-white font-semibold px-4 py-1 rounded-md shadow-sm hover:bg-[#003340] transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path>
-                </svg>
-                Previous
-              </button>
-              <button
-                className="bg-[#06b6d4] flex items-center gap-2 text-white font-semibold px-4 py-1 rounded-md shadow-sm hover:bg-[#003340] transition-colors"
-              >
-                Next
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
-                </svg>
-              </button>
               <button
                 className="text-white font-semibold px-4 py-1 rounded-md shadow-sm hover:bg-[#003340] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 style={{ backgroundColor: '#004051' }}
-                onClick={addNewLogEntry}
+                onClick={handleUpdate}
+                disabled={isUpdating}
               >
-                + Add Entry
+                {isUpdating ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Updating...
+                  </>
+                ) : (
+                  'Update'
+                )}
               </button>
             </div>
-          </div>
-        </header>
-        <header className="sticky top-0 z-20 border-b-2 mt-2 border-[#004051] pb-2 pr-4 bg-white">
-          <div className="flex items-center justify-between">
-            <span className="font-medium text-gray-800 uppercase">
-                 Date: today date
-            </span>
-                |
-            <span className="font-medium text-gray-800 uppercase">
-                 Flight Leg: 01 
-            </span>
-                |
-            <span className="font-medium text-gray-800 uppercase">
-                Flight No: EK0824 
-            </span>
-                |
-            <span className="font-medium text-gray-800 uppercase">
-                Sector: DMM (ETD 01:15, 7 Mar 25) → DXB (ETA 02:17, 7 Mar 25)
-            </span>
           </div>
         </header>
 
@@ -394,7 +338,9 @@ export default function LogSection({
             return (
               <div
                 key={`log-entry-${index}`}
-                className={`border border-gray-300 rounded-lg mb-6 p-4 sm:p-6 shadow-sm space-y-6 ${isFullyAuthorized ? 'bg-[#E0F7FA]' : 'bg-gray-50'}`}
+                className={`border border-gray-300 rounded-lg mb-6 p-4 sm:p-6 shadow-sm space-y-6 ${
+                  isFullyAuthorized ? 'bg-[#E0F7FA]' : 'bg-gray-50'
+                }`}
               >
                 <div className="flex flex-col gap-4 border-b border-gray-200 pb-4">
                   <div className="flex flex-wrap md:flex-nowrap items-start gap-4">
@@ -402,14 +348,19 @@ export default function LogSection({
                       <div className="flex flex-wrap md:flex-nowrap items-center gap-4">
                         <div className="flex flex-row items-center gap-2 w-full sm:w-[350px] max-w-[350px]">
                           <h1 className="text-xl font-bold text-[#004051] w-[15px]">
-                            {entry.displayNumber || index + 1}.
+                            {entry.displayNumber}.
                           </h1>
-
                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-[320px]">
-                            <label className="text-sm font-medium text-gray-700 w-[60px] min-w-[60px]">CLASS:</label>
+                            <label className="text-sm font-medium text-gray-700 w-[60px] min-w-[60px]">
+                              CLASS:
+                            </label>
                             <div className="flex flex-col w-full sm:w-[350px] max-w-[350px]">
                               <select
-                                className={`border ${entry.class && !/^(L|P|LI)$/i.test(entry.class) ? 'border-red-500' : 'border-gray-300'} rounded px-3 py-2 text-base focus:ring-2 focus:ring-[#004051]`}
+                                className={`border ${
+                                  entry.class && !/^(L|P|LI)$/i.test(entry.class)
+                                    ? 'border-red-500'
+                                    : 'border-gray-300'
+                                } rounded px-3 py-2 text-base focus:ring-2 focus:ring-[#004051]`}
                                 value={entry.class}
                                 onChange={(e) => handleLogInputChange(index, 'class', e.target.value)}
                                 disabled={(Boolean(entry.authenticated) || isFullyAuthorized) as boolean}
@@ -426,13 +377,19 @@ export default function LogSection({
                           </div>
                         </div>
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 md:gap-0 w-full md:w-[350px]">
-                          <label className={`text-sm font-medium ${!entry.raisedBy && showError ? 'text-red-500' : 'text-gray-600'} w-[120px] min-w-[80px]`}>
+                          <label
+                            className={`text-sm font-medium ${
+                              !entry.raisedBy && showError ? 'text-red-500' : 'text-gray-600'
+                            } w-[120px] min-w-[80px]`}
+                          >
                             RAISED BY:
                           </label>
                           <div className="flex flex-col w-[300px]">
                             <input
                               type="text"
-                              className={`w-full border border-gray-300 rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051] ${!entry.raisedBy && showError ? 'border-red-500' : 'border-gray-300'}`}
+                              className={`w-full border border-gray-300 rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051] ${
+                                !entry.raisedBy && showError ? 'border-red-500' : 'border-gray-300'
+                              }`}
                               placeholder="Auth ID / (Staff ID)"
                               value={entry.raisedBy}
                               onChange={(e) => handleLogInputChange(index, 'raisedBy', e.target.value)}
@@ -451,7 +408,11 @@ export default function LogSection({
                     <textarea
                       placeholder="Details..."
                       rows={3}
-                      className={`w-full border ${entry.defectDetails && !/.+/.test(entry.defectDetails) ? 'border-red-500' : 'border-gray-300'} rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051] resize-none overflow-hidden mt-2`}
+                      className={`w-full border ${
+                        entry.defectDetails && !/.+/.test(entry.defectDetails)
+                          ? 'border-red-500'
+                          : 'border-gray-300'
+                      } rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051] resize-none overflow-hidden mt-2`}
                       value={entry.defectDetails}
                       onChange={(e) => {
                         handleLogInputChange(index, 'defectDetails', e.target.value);
@@ -465,7 +426,9 @@ export default function LogSection({
                 <div className="flex flex-col md:flex-row flex-wrap md:flex-nowrap items-start gap-4 border-b border-gray-200 pb-4">
                   <div className="flex flex-wrap md:flex-nowrap gap-4 flex-1 items-end">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-[280px]">
-                      <label className="text-sm font-medium text-gray-700 w-[40px] min-w-[40px]">ATA:</label>
+                      <label className="text-sm font-medium text-gray-700 w-[40px] min-w-[40px]">
+                        ATA:
+                      </label>
                       <div className="flex flex-col w-full md:w-[200px]">
                         <input
                           type="text"
@@ -478,7 +441,9 @@ export default function LogSection({
                       </div>
                     </div>
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-[320px]">
-                      <label className="text-sm font-medium text-gray-700 w-[80px] min-w-[80px]">MMSG / FC:</label>
+                      <label className="text-sm font-medium text-gray-700 w-[80px] min-w-[80px]">
+                        MMSG / FC:
+                      </label>
                       <div className="flex flex-col w-full md:w-[200px]">
                         <input
                           type="text"
@@ -531,7 +496,9 @@ export default function LogSection({
                       placeholder="Details..."
                       rows={3}
                       className={`w-full border ${
-                        entry.actionDetails && !/.+/.test(entry.actionDetails) ? 'border-red-500' : 'border-gray-300'
+                        entry.actionDetails && !/.+/.test(entry.actionDetails)
+                          ? 'border-red-500'
+                          : 'border-gray-300'
                       } rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051] resize-none overflow-hidden mt-2`}
                       value={entry.actionDetails}
                       onChange={(e) => {
@@ -552,10 +519,12 @@ export default function LogSection({
                     {entry.shortSignAuthId && (
                       <div className="mt-2 flex flex-col sm:flex-row items-start sm:items-center flex-wrap gap-x-4 gap-y-2 text-sm">
                         <div className="font-medium text-gray-700 w-full md:w-[250px]">
-                          SHORT SIGN AUTH ID: <span className="font-medium text-gray-800">{entry.shortSignAuthId}</span>
+                          SHORT SIGN AUTH ID:{' '}
+                          <span className="font-medium text-gray-800">{entry.shortSignAuthId}</span>
                         </div>
                         <div className="font-medium text-gray-700 w-full md:w-[250px]">
-                          SHORT SIGN AUTH NAME: <span className="font-medium text-gray-800">{entry.shortSignAuthName}</span>
+                          SHORT SIGN AUTH NAME:{' '}
+                          <span className="font-medium text-gray-800">{entry.shortSignAuthName}</span>
                         </div>
                       </div>
                     )}
@@ -565,7 +534,9 @@ export default function LogSection({
                       {!entry.shortSignAuthId ? (
                         <button
                           type="button"
-                          className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : ''} min-w-[120px]`}
+                          className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${
+                            isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : ''
+                          } min-w-[120px]`}
                           onClick={() => {
                             if (!entry.actionDetails || entry.actionDetails.trim() === '') {
                               const updatedErrors = [...descriptionErrors];
@@ -579,11 +550,17 @@ export default function LogSection({
                         >
                           Short Sign
                         </button>
-                      ) : ''}
+                      ) : (
+                        ''
+                      )}
                       {!entry.actionAuthId ? (
                         <button
                           type="button"
-                          className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${!entry.shortSignAuthId || isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : ''} min-w-[120px]`}
+                          className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${
+                            !entry.shortSignAuthId || isFullyAuthorized
+                              ? 'opacity-50 cursor-not-allowed'
+                              : ''
+                          } min-w-[120px]`}
                           onClick={() => {
                             if (!entry.actionDetails || entry.actionDetails.trim() === '') {
                               const updatedErrors = [...descriptionErrors];
@@ -600,10 +577,12 @@ export default function LogSection({
                       ) : (
                         <div className="flex flex-row flex-wrap items-center gap-2 w-full min-w-[120px]">
                           <div className="font-medium text-gray-700 min-w-[100px]">
-                            AUTH ID: <span className="font-medium text-gray-800">{entry.actionAuthId}</span>
+                            AUTH ID:{' '}
+                            <span className="font-medium text-gray-800">{entry.actionAuthId}</span>
                           </div>
                           <div className="font-medium text-gray-700 min-w-[100px]">
-                            AUTH NAME: <span className="font-medium text-gray-800">{entry.actionAuthName}</span>
+                            AUTH NAME:{' '}
+                            <span className="font-medium text-gray-800">{entry.actionAuthName}</span>
                           </div>
                         </div>
                       )}
@@ -619,8 +598,8 @@ export default function LogSection({
                         type: 'select',
                         name: 'ddAction',
                         options: ['Raised (R)', 'Worked (W)', 'Cleared (C)'],
-                        value: entry.ddAction,
-                        invalid: entry.ddAction && !['Raised', 'Worked', 'Cleared'].includes(entry.ddAction),
+                        value: normalizeDdAction(entry.ddAction),
+                        invalid: entry.ddAction && !['Raised (R)', 'Worked (W)', 'Cleared (C)'].includes(normalizeDdAction(entry.ddAction)),
                         error: 'Select a valid DD Action',
                         placeholder: 'Action',
                       },
@@ -629,8 +608,8 @@ export default function LogSection({
                         type: 'select',
                         name: 'ddType',
                         options: ['Major (M)', 'Minor (N)'],
-                        value: entry.ddType,
-                        invalid: entry.ddType && !['Major', 'Minor'].includes(entry.ddType),
+                        value: normalizeDdType(entry.ddType),
+                        invalid: entry.ddType && !['Major (M)', 'Minor (N)'].includes(normalizeDdType(entry.ddType)),
                         error: 'Select a valid DD Type',
                         placeholder: 'Type',
                       },
@@ -657,8 +636,8 @@ export default function LogSection({
                         type: 'select',
                         name: 'cat',
                         options: ['Cat A', 'Cat B', 'Cat C', 'Cat D', 'Cat U'],
-                        value: entry.cat,
-                        invalid: entry.cat && !['Cat A', 'Cat B', 'Cat C', 'Cat D', 'Cat U'].includes(entry.cat),
+                        value: normalizeCat(entry.cat),
+                        invalid: entry.cat && !['Cat A', 'Cat B', 'Cat C', 'Cat D', 'Cat U'].includes(normalizeCat(entry.cat)),
                         error: 'Select a valid Category',
                         placeholder: 'Cat',
                       },
@@ -678,15 +657,11 @@ export default function LogSection({
                             } rounded px-2 py-2 text-sm focus:ring-2 focus:ring-[#004051]`}
                             value={field.value}
                             onChange={(e) =>
-                              handleLogInputChange(
-                                index,
-                                field.name as keyof LogEntry,
-                                e.target.value
-                              )
+                              handleLogInputChange(index, field.name as keyof LogEntry, e.target.value)
                             }
                             disabled={!!isFullyAuthorized}
                           >
-                            <option value="">Choose {field.label}</option>
+                            <option value="">Choose {field.placeholder}</option>
                             {field.options?.map((opt) => (
                               <option key={opt} value={opt}>
                                 {opt}
@@ -711,7 +686,7 @@ export default function LogSection({
                                   e.target.value
                                 )
                               }
-                              disabled={!!isFullyAuthorized || field.name === 'ddNo' || (field.name === 'ddNo' && isFetchingDd)} // Disable ddNo input
+                              disabled={!!isFullyAuthorized || field.name === 'ddNo' || (field.name === 'ddNo' && isFetchingDd)}
                             />
                             {field.name === 'ddNo' && isFetchingDd && (
                               <div className="absolute right-2 top-2 animate-spin h-4 w-4 text-gray-500">
@@ -732,13 +707,15 @@ export default function LogSection({
                     <div className="flex items-center gap-4">
                       <h2 className="text-sm font-semibold text-gray-700 min-w-[40px]">1.A</h2>
                       <p className="text-sm text-gray-800 flex-1">
-                        It is Certified that an independent inspection has been carried out for installation IAW XYZ and is satisfactory.
+                        It is Certified that an independent inspection has been carried out for
+                        installation IAW XYZ and is satisfactory.
                       </p>
                     </div>
                     <div className="flex items-center gap-4">
                       <h2 className="text-sm font-semibold text-gray-700 min-w-[40px]">1.B</h2>
                       <p className="text-sm text-gray-800 flex-1">
-                        It is Certified that an independent inspection has been carried out for functional check IAW XYZ and is satisfactory.
+                        It is Certified that an independent inspection has been carried out for
+                        functional check IAW XYZ and is satisfactory.
                       </p>
                     </div>
                   </div>
@@ -768,7 +745,9 @@ export default function LogSection({
                                 type="text"
                                 placeholder="Type here..."
                                 value={row.partNo}
-                                onChange={(e) => handleComponentRowChange(index, rowIndex, 'partNo', e.target.value)}
+                                onChange={(e) =>
+                                  handleComponentRowChange(index, rowIndex, 'partNo', e.target.value)
+                                }
                               />
                             </td>
                             <td className="p-2 border border-gray-300">
@@ -777,7 +756,9 @@ export default function LogSection({
                                 type="text"
                                 placeholder="Type here..."
                                 value={row.serialOn}
-                                onChange={(e) => handleComponentRowChange(index, rowIndex, 'serialOn', e.target.value)}
+                                onChange={(e) =>
+                                  handleComponentRowChange(index, rowIndex, 'serialOn', e.target.value)
+                                }
                               />
                             </td>
                             <td className="p-2 border border-gray-300">
@@ -786,7 +767,9 @@ export default function LogSection({
                                 type="text"
                                 placeholder="Type here..."
                                 value={row.partOff}
-                                onChange={(e) => handleComponentRowChange(index, rowIndex, 'partOff', e.target.value)}
+                                onChange={(e) =>
+                                  handleComponentRowChange(index, rowIndex, 'partOff', e.target.value)
+                                }
                               />
                             </td>
                             <td className="p-2 border border-gray-300">
@@ -795,7 +778,9 @@ export default function LogSection({
                                 type="text"
                                 placeholder="Type here..."
                                 value={row.serialOff}
-                                onChange={(e) => handleComponentRowChange(index, rowIndex, 'serialOff', e.target.value)}
+                                onChange={(e) =>
+                                  handleComponentRowChange(index, rowIndex, 'serialOff', e.target.value)
+                                }
                               />
                             </td>
                             <td className="p-2 border border-gray-300">
@@ -804,7 +789,9 @@ export default function LogSection({
                                 type="text"
                                 placeholder="Type here..."
                                 value={row.grn}
-                                onChange={(e) => handleComponentRowChange(index, rowIndex, 'grn', e.target.value)}
+                                onChange={(e) =>
+                                  handleComponentRowChange(index, rowIndex, 'grn', e.target.value)
+                                }
                               />
                             </td>
                             <td className="p-2 border border-gray-300 text-center">
@@ -825,27 +812,37 @@ export default function LogSection({
                     <button
                       onClick={() => addComponentRow(index)}
                       type="button"
-                      className="bg-[#004051] w-30 text-white text-sm font-medium py-2 px-3 mr-2 rounded shadow transition hover:bg-[#00363f]"
+                      className="bg-[#004051] text-white text-sm font-medium py-1 px-3 mr-2 rounded shadow transition w-auto md:w-auto hover:bg-[#00363f]"
                     >
                       + Add New
                     </button>
-                    {/* <button
+                    <button
                       onClick={() => removeLogEntry(index)}
-                      className={`bg-red-600 text-white px-3 py-1 text-sm rounded-md font-medium mt-2 ${isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'}`}
+                      className={`bg-red-600 text-white px-3 py-1 text-sm rounded-md font-medium mt-2 ${
+                        isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'
+                      }`}
                       disabled={!!isFullyAuthorized}
                     >
                       Remove Log
-                    </button> */}
+                    </button>
                   </div>
                 </div>
               </div>
             );
           })}
-          
+          <div className="flex justify-center mb-4">
+            <button
+              onClick={addNewLogEntry}
+              className="bg-[#004051] text-white px-4 py-2 rounded-md font-medium text-sm hover:bg-[#006172]"
+            >
+              + Add New Log
+            </button>
+          </div>
           <div className="bg-[#f0fafa] border border-[#004051] rounded-lg p-3 shadow-sm mb-4">
             <h3 className="text-sm font-semibold text-[#004051] mb-1">📌 Note:</h3>
             <p className="text-md text-gray-800 leading-relaxed">
-              Enter defect and action details accurately. Ensure all fields are completed as per aviation maintenance protocols.
+              Enter defect and action details accurately. Ensure all fields are completed as per
+              aviation maintenance protocols.
             </p>
           </div>
         </div>

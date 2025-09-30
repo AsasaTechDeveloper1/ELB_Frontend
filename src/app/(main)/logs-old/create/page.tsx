@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import LogSection from './create/LogSection';
-import FlightDetailsSection from './create/FlightDetailsSection';
-import FluidsSection from './create/FluidsSection';
-import ChecksSection from './create/ChecksSection';
-import AuthModal from './create/AuthModal';
-import { LogEntry, AuthData } from './types';
+import LogSection from './LogSection';
+import FlightDetailsSection from './FlightDetailsSection';
+import FluidsSection from './FluidsSection';
+import ChecksSection from './ChecksSection';
+import AuthModal from './AuthModal';
+import { LogEntry, AuthData } from '../types';
 
 const initialLogEntry: LogEntry = {
   id: 1,
@@ -56,8 +56,6 @@ export default function FormElementsPage() {
   });
   const [descriptionErrors, setDescriptionErrors] = useState<string[]>([]);
   const [showError, setShowError] = useState(false);
-  const [showLogListModal, setShowLogListModal] = useState(false);
-  const [selectedLogIndex, setSelectedLogIndex] = useState<number>(0);
 
   const openAuthModal = (type: string, index: number) => {
     const today = new Date().toISOString().split("T")[0];
@@ -100,6 +98,7 @@ export default function FormElementsPage() {
 
     setLogEntries(updated);
    
+    // ✅ NEW: also set authDetails for checks
     setAuthDetails(prev => ({
       ...prev,
       [authModal.type]: {
@@ -113,21 +112,18 @@ export default function FormElementsPage() {
       },
     }));
 
+    // ✅ NEW: disable the checkbox after save
     setCheckedItems(prev => ({
       ...prev,
       [authModal.type]: true,
     }));
 
-    setAuthModal(null);
+     setAuthModal(null);
     setAuthData({ authId: '', authName: '', password: '', sign: '', date: '', expDate: '' });
+
   };
 
   const tabs = [
-    {
-      id: 'FLT DETAILS/RELEASE',
-      label: 'FLT DETAILS/RELEASE',
-      content: <FlightDetailsSection />,
-    },
     {
       id: 'Log',
       label: 'Log',
@@ -142,6 +138,11 @@ export default function FormElementsPage() {
           openAuthModal={openAuthModal}
         />
       ),
+    },
+    {
+      id: 'FLT DETAILS/RELEASE',
+      label: 'FLT DETAILS/RELEASE',
+      content: <FlightDetailsSection />,
     },
     {
       id: 'Fluids',
@@ -161,32 +162,11 @@ export default function FormElementsPage() {
     },
   ];
 
-  const handleViewList = () => {
-    setShowLogListModal(true);
-  };
-
-  const handleAddNewLog = () => {
-    const newLog = { ...initialLogEntry, id: logEntries.length + 1, displayNumber: logEntries.length + 1 };
-    setLogEntries([...logEntries, newLog]);
-    setSelectedLogIndex(logEntries.length);
-    setActiveTab('Log');
-  };
-
-  const handleSelectLog = (index: number) => {
-    setSelectedLogIndex(index);
-    setShowLogListModal(false);
-    setActiveTab('Log');
-  };
-
-  const closeLogListModal = () => {
-    setShowLogListModal(false);
-  };
-
   const activeContent = tabs.find((tab) => tab.id === activeTab)?.content;
 
   return (
     <div className="space-y-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6">
         <ul className="flex gap-2 overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <li
@@ -202,20 +182,6 @@ export default function FormElementsPage() {
             </li>
           ))}
         </ul>
-        <div className="flex gap-2">
-          <button
-            className="px-4 py-2 bg-[rgb(0,64,81)] text-white rounded-md hover:bg-[rgb(0,80,100)] transition-all"
-            onClick={handleViewList}
-          >
-            View List
-          </button>
-          <button
-            className="px-4 py-2 bg-[rgb(0,64,81)] text-white rounded-md hover:bg-[rgb(0,80,100)] transition-all"
-            onClick={handleAddNewLog}
-          >
-            Add New Log
-          </button>
-        </div>
       </div>
       <div>{activeContent}</div>
       <AuthModal
@@ -226,52 +192,6 @@ export default function FormElementsPage() {
         saveAuthorization={saveAuthorization}
         setCheckedItems={setCheckedItems}
       />
-      {showLogListModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-5 w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-lg border-t-4 border-yellow-500">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Log Entries</h2>
-              <button
-                className="text-gray-500 hover:text-gray-700"
-                onClick={closeLogListModal}
-              >
-                ✕
-              </button>
-            </div>
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-[rgb(0,64,81)] text-white">
-                  <th className="p-3 text-left">Date</th>
-                  <th className="p-3 text-left">Log Page Number</th>
-                  <th className="p-3 text-left">Flight Leg</th>
-                  <th className="p-3 text-left">Flight No</th>
-                  <th className="p-3 text-left">Sector</th>
-                  <th className="p-3 text-left">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logEntries.map((entry, index) => (
-                  <tr key={entry.id} className="border-b border-gray-200 hover:bg-gray-100">
-                    <td className="p-3">{entry.date || 'N/A'}</td>
-                    <td className="p-3">{entry.displayNumber}</td>
-                    <td className="p-3">0</td>
-                    <td className="p-3">EK0824</td>
-                    <td className="p-3">DMM (ETD 01:15, 7 Mar 25) → DXB (ETA 02:17, 7 Mar 25)</td>
-                    <td className="p-3">
-                      <button
-                        className="px-3 py-1 bg-[rgb(0,64,81)] text-white rounded-md hover:bg-[rgb(0,80,100)] transition-all"
-                        onClick={() => handleSelectLog(index)}
-                      >
-                        Select
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
