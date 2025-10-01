@@ -110,7 +110,7 @@ export default function FlightListPage() {
         <h2 className="text-lg sm:text-xl font-semibold text-[#004051] flex items-center gap-2">
           <MdFlightTakeoff className="text-base sm:text-xl" />
           <span className="sm:hidden">Flights</span>
-          <span className="hidden sm:inline">Previous Flights</span>
+          <span className="hidden sm:inline">Flights</span>
         </h2>
 
         <button
