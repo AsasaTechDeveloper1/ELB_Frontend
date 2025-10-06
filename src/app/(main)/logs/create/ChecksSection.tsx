@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-  
+
 interface AuthDetails {
   svcOption: string;
   authId: string;
@@ -11,11 +11,15 @@ interface AuthDetails {
 
 interface ChecksSectionProps {
   openAuthModal: (type: string, index: number) => void;
-  checkedItems: { [key: string]: boolean }; 
+  checkedItems: { [key: string]: boolean };
   setCheckedItems: React.Dispatch<React.SetStateAction<{ [key: string]: boolean }>>;
   authDetails: { [key: string]: AuthDetails };
   setAuthDetails: React.Dispatch<React.SetStateAction<{ [key: string]: AuthDetails }>>;
-} 
+  currentLogId: string;
+  onChecksSaved?: () => Promise<void>;
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
 
 export default function ChecksSection({
   openAuthModal,
@@ -23,9 +27,44 @@ export default function ChecksSection({
   setCheckedItems,
   authDetails,
   setAuthDetails,
+  currentLogId,
+  onChecksSaved,
 }: ChecksSectionProps) {
   const [isAcceptanceAuthorized, setIsAcceptanceAuthorized] = useState(false);
   const [validationErrors, setValidationErrors] = useState<{ [key: string]: boolean }>({});
+
+  // Function to save check authorizations to the backend
+  const saveChecks = async () => {
+    if (!currentLogId) {
+      console.error('No log ID provided');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/checks/${currentLogId}/checks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          checks: authDetails,
+          createdBy: 'user-id', // Replace with actual user ID
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to save check authorizations');
+
+      const data = await response.json();
+      console.log('✅ Check authorizations saved:', data);
+
+      // Trigger a callback to refetch logs if provided
+      if (onChecksSaved) {
+        await onChecksSaved();
+      }
+    } catch (error) {
+      console.error('❌ Error saving check authorizations:', error);
+      alert('Failed to save check authorizations. Please try again.');
+    }
+  };
+
   const handleCheckboxChange = (label: string, index: number) => {
     if (checkedItems[label] || isAcceptanceAuthorized) return;
 
@@ -35,7 +74,7 @@ export default function ChecksSection({
     setAuthDetails((prev) => ({
       ...prev,
       [label]: {
-        authId: '—', // placeholder until modal fills in
+        authId: '—',
         authName: '—',
         authDate: new Date().toLocaleDateString('en-US', {
           year: 'numeric',
@@ -47,25 +86,21 @@ export default function ChecksSection({
     }));
   };
 
-  const handleAcceptanceAuth = () => {
-
+  const handleAcceptanceAuth = async () => {
     const requiredChecks = ["TRANSIT", "DAILY", "ETOPS", "Letter", "PDI"];
-    // Find missing checks
     const missing = requiredChecks.filter(label => !checkedItems[label]);
 
     if (missing.length > 0) {
-      // Mark missing ones in state
       const errors: { [key: string]: boolean } = {};
       missing.forEach(label => {
         errors[label] = true;
       });
       setValidationErrors(errors);
-      return; // Stop here, don't open modal
+      return;
     }
 
-    // Clear errors if all are done
     setValidationErrors({});
-    
+
     if (isAcceptanceAuthorized) return;
 
     openAuthModal('ACCEPTANCE', 0);
@@ -75,7 +110,7 @@ export default function ChecksSection({
     setAuthDetails((prev) => ({
       ...prev,
       ACCEPTANCE: {
-        authId: '—', // or empty string if you prefer
+        authId: '—',
         authName: '—',
         authDate: new Date().toLocaleDateString('en-US', {
           year: 'numeric',
@@ -85,6 +120,8 @@ export default function ChecksSection({
         svcOption: '',
       },
     }));
+
+    await saveChecks();
   };
 
   return (
@@ -134,7 +171,6 @@ export default function ChecksSection({
             </div>
           </div>
 
-          {/* DAILY checkbox row */}
           <div className="border-b py-2">
             <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 sm:gap-8">
               <div className="flex flex-row items-center gap-6">
@@ -173,7 +209,6 @@ export default function ChecksSection({
             </div>
           </div>
 
-          {/* ETOPS checkbox row */}
           <div className="border-b py-2">
             <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 sm:gap-8">
               <div className="flex flex-row items-center gap-6">
@@ -212,7 +247,6 @@ export default function ChecksSection({
             </div>
           </div>
 
-          {/* LETTER checkbox row with SVC dropdown */}
           <div className="border-b py-2">
             <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 sm:gap-8">
               <div className="flex flex-row items-center gap-6">
@@ -232,7 +266,6 @@ export default function ChecksSection({
                     >
                       LETTER
                     </label>
-                    {/* SVC Dropdown */}
                     <select
                       disabled={!checkedItems['Letter'] || isAcceptanceAuthorized}
                       className={`min-w-[150px] border rounded px-2 py-1 text-xs sm:text-sm text-gray-900 ${
@@ -258,7 +291,6 @@ export default function ChecksSection({
                       <option value="D">D. 1D/2D/3D</option>
                     </select>
                   </div>
-                  {/* Validation Error */}
                   {validationErrors["Letter"] && (
                     <div className="text-red-500 text-xs sm:text-sm mt-1">This check is required</div>
                   )}
@@ -279,7 +311,6 @@ export default function ChecksSection({
             </div>
           </div>
 
-          {/* PDI checkbox row */}
           <div className="border-b py-2">
             <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 sm:gap-8">
               <div className="flex flex-row items-center gap-6">
@@ -318,7 +349,6 @@ export default function ChecksSection({
             </div>
           </div>
 
-          {/* ACCEPTANCE auth */}
           <div className="flex items-center justify-between pt-4">
             <div className="text-[#004051] font-medium text-base">ACCEPTANCE</div>
             <div className="flex items-center gap-4">

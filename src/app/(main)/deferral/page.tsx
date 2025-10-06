@@ -22,7 +22,7 @@ interface DeferralEntry {
     mel_cd_ref: string | null;
     mel_cat: string | null;
     date: string | null;
-    dd_action?: string | null; // Added dd_action field
+    dd_action?: string | null;
   };
   description: string;
   clear_reference: {
@@ -66,6 +66,7 @@ interface Log {
   id: string;
   logPageNo: string;
   items: LogItem[];
+  flightLeg: number; // Added flightLeg to the interface
 }
 
 const initialEntry: DeferralEntry = {
@@ -352,7 +353,7 @@ export default function DeferralsForm() {
       const newGroupNo = entries.length + 1;
       const lastTypeNo = await fetchLatestTypeNo();
       const newTypeNo = entries.length === 0 && lastTypeNo === 'DEF-00000' ? 'DEF-00001' : incrementTypeNo(lastTypeNo);
-      const targetLog = logs.find((log) => log.logPageNo === 'LOG-00001');
+      const targetLog = logs.find((log) => log.flightLeg === 0); // Find log with flightLeg 0
       const nextDisplayNumber = (targetLog?.items ?? []).length > 0 
         ? Math.max(...(targetLog?.items ?? []).map((item) => item.displayNumber)) + 1 
         : 1;
@@ -366,7 +367,7 @@ export default function DeferralsForm() {
           defect_reference: {
             ...initialEntry.defect_reference,
             type_no: newTypeNo,
-            log_page: 'LOG-00001',
+            log_page: targetLog?.logPageNo || null,
             log_item_no: nextLogItemId,
           },
         },
@@ -417,27 +418,16 @@ export default function DeferralsForm() {
       setError(null);
 
       const entry = entries[index];
-      const logPageNo = entry.defect_reference.log_page;
-      const logItemId = entry.defect_reference.log_item_no;
-
-      if (!logPageNo) {
-        setError('Log Page No is required in Defect Reference to copy the entry.');
-        return;
-      }
-      if (!logItemId) {
-        setError('Log Item No is required in Defect Reference to copy the entry.');
+      const isCleared = entry.defect_reference.dd_action === 'Cleared (C)';
+      if (isCleared) {
+        setError('Cannot copy a cleared deferral entry.');
         return;
       }
 
-      const targetLog = logs.find((log) => log.logPageNo === logPageNo);
+      // Find the log with flightLeg 0
+      const targetLog = logs.find((log) => log.flightLeg === 0);
       if (!targetLog) {
-        setError(`Log with page number ${logPageNo} not found.`);
-        return;
-      }
-
-      const originalLogItem = targetLog.items.find((item) => item.id === logItemId);
-      if (!originalLogItem) {
-        setError(`Log item with ID ${logItemId} not found in log ${logPageNo}.`);
+        setError('No log with flight leg 0 found.');
         return;
       }
 
@@ -448,32 +438,32 @@ export default function DeferralsForm() {
         ? Math.max(...targetLog.items.map((item) => item.displayNumber)) + 1
         : 1;
 
+      // Create a new log item based on the deferral entry
       const newLogItem: Partial<LogItem> = {
         displayNumber: nextDisplayNumber,
         defectDetails: entry.description,
-        actionDetails: originalLogItem.actionDetails || '',
-        raisedBy: originalLogItem.raisedBy || '',
+        actionDetails: '',
+        raisedBy: entry.enteredAuth || '',
         ddChecked: true,
         ddAction: 'Raised (R)',
         ddType: entry.defect_reference.dd || '',
         ddNo: newDdNo,
-        melCdlRef: entry.defect_reference.mel_cd_ref || originalLogItem.melCdlRef || '',
+        melCdlRef: entry.defect_reference.mel_cd_ref || '',
         cat: entry.defect_reference.mel_cat || '',
-        indInspChecked: originalLogItem.indInspChecked || false,
-        sdr: originalLogItem.sdr || false,
-        mmsgFc: originalLogItem.mmsgFc || '',
-        ata: originalLogItem.ata || '',
-        components: originalLogItem.components
-          ? JSON.parse(JSON.stringify(originalLogItem.components))
-          : [],
+        indInspChecked: false,
+        sdr: false,
+        mmsgFc: '',
+        ata: '',
+        components: [],
       };
 
+      // Save the new log item to the log with flightLeg 0
       const response = await fetch(`${API_BASE}/logs/${targetLog.id}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           logItem: newLogItem,
-          createdBy: 'system',
+          createdBy: 'system', // Replace with actual user ID if available
         }),
       });
 
@@ -482,30 +472,10 @@ export default function DeferralsForm() {
         throw new Error(data.error || 'Failed to create log item');
       }
 
-      const newLogItemId = data.savedLogItem?.id;
-      if (!newLogItemId) {
-        throw new Error('Failed to retrieve new log item ID from response');
-      }
-
-      setEntries((prevEntries) =>
-        prevEntries.map((e, i) =>
-          i === index
-            ? {
-                ...e,
-                clear_reference: {
-                  ...e.clear_reference,
-                  log_page: logPageNo,
-                  log_item_no: newLogItemId,
-                },
-              }
-            : e
-        )
-      );
-
+      // Refresh logs to reflect the new item
       await fetchLogs();
-      await fetchDeferrals();
 
-      alert('Log item copied and clearance reference updated successfully! ✅');
+      alert('Log item created successfully in flight leg 0! ✅');
     } catch (err: any) {
       console.error('Copy operation failed:', err);
       setError(`Error during copy operation: ${err.message}`);
@@ -559,6 +529,7 @@ export default function DeferralsForm() {
               clearedAuthName: authData.authName,
               clearedDate: authData.date,
               clear_reference: { ...entry.clear_reference, date: authData.date, staff_id: authData.authId },
+              defect_reference: { ...entry.defect_reference, dd_action: 'Cleared (C)' }, // Update dd_action to Cleared
             }),
       };
 
@@ -816,40 +787,6 @@ export default function DeferralsForm() {
                   '+ Add Entry'
                 )}
               </button>
-              {/* <button
-                onClick={handleSave}
-                disabled={loading}
-                className="bg-[#004051] text-white px-4 py-1 mr-4 rounded hover:bg-[#002f35] transition disabled:opacity-50 flex items-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Saving...
-                  </>
-                ) : (
-                  'Save'
-                )}
-              </button> */}
-              {/* <button
-                onClick={fetchDeferrals}
-                disabled={loading}
-                className="bg-[#06b6d4] text-white px-4 py-1 mr-4 rounded hover:bg-[#005b6b] transition disabled:opacity-50 flex items-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Loading...
-                  </>
-                ) : (
-                  'Refresh'
-                )}
-              </button> */}
             </div>
           </div>
         </header>
@@ -1151,20 +1088,18 @@ export default function DeferralsForm() {
                               'Remove'
                             )}
                           </button>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-              )
-            }
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
 
         <div className="flex justify-center mb-6 mt-4">
-          
         </div>
       </div>
 
@@ -1182,9 +1117,6 @@ export default function DeferralsForm() {
                 {authModal.type} Authorization Required
               </h2>
             </div>
-            <p className="text-sm text-gray-600 mb-4">
-              This action requires proper authorization. Please provide valid credentials.
-            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Auth ID (Staff ID)</label>

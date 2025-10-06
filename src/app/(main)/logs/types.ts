@@ -11,7 +11,7 @@ export interface LogEntry {
   updated_id: string; // Client-side ID for log entry
   class: string;
   raisedBy: string;
-  defectDetails: string; 
+  defectDetails: string;
   mmsgFc: string;
   ata: string;
   sdr: boolean;
@@ -28,9 +28,9 @@ export interface LogEntry {
   shortSignAuthName: string;
   actionAuthId: string;
   actionAuthName: string;
-  logItemId?: string;   // Firestore log item ID
-  createdAt?: string;   // ISO date string
-  updatedAt?: string;   // ISO date string
+  logItemId?: string; // Firestore log item ID
+  createdAt?: string; // ISO date string
+  updatedAt?: string; // ISO date string
 }
 
 export interface ComponentRow {
@@ -49,4 +49,11 @@ export interface AuthData {
   sign: string;
   date: string;
   expDate: string;
+}
+
+export interface AuthDetails {
+  svcOption: string;
+  authId: string;
+  authName: string;
+  authDate: string;
 }

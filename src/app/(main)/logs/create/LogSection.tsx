@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogEntry, ComponentRow } from '../types';
 
@@ -34,7 +34,7 @@ const initialLogEntry: LogEntry = {
   ddType: '',
   ddNo: '',
   melCdlRef: '',
-  cat: 'Cat A', // Set default to 'Cat A'
+  cat: 'Cat A',
   indInspChecked: false,
   componentRows: [{ partNo: '', serialOn: '', partOff: '', serialOff: '', grn: '' }],
   shortSignAuthId: '',
@@ -103,7 +103,7 @@ const normalizeDdType = (ddType: string): string => {
 // Normalize cat to backend format (e.g., "Cat A" -> "A")
 const normalizeMelCat = (cat: string): string => {
   if (cat.startsWith('Cat ')) return cat.replace('Cat ', '');
-  return cat || 'A'; // Default to 'A' if empty
+  return cat || 'A';
 };
 
 // Convert backend ddType to display format (e.g., "M" -> "Major (M)")
@@ -116,7 +116,7 @@ const displayDdType = (ddType: string): string => {
 // Convert backend cat to display format (e.g., "A" -> "Cat A")
 const displayMelCat = (cat: string): string => {
   if (['A', 'B', 'C', 'D', 'U'].includes(cat)) return `Cat ${cat}`;
-  return cat || 'Cat A'; // Default to 'Cat A' for display
+  return cat || 'Cat A';
 };
 
 // Save or update a single log item
@@ -144,13 +144,20 @@ const saveLogItem = async (logId: string, entry: LogEntry, index: number) => {
       mmsgFc: entry.mmsgFc,
       ata: entry.ata,
       components: entry.componentRows,
+      shortSignAuthId: entry.shortSignAuthId,
+      shortSignAuthName: entry.shortSignAuthName,
+      actionAuthId: entry.actionAuthId,
+      actionAuthName: entry.actionAuthName,
     },
     createdBy: 'user-id',
   };
 
+  const method = entry.updated_id ? 'PUT' : 'POST';
+  const url = entry.updated_id ? `${API_BASE}/logs/${logId}/items/${entry.updated_id}` : `${API_BASE}/logs/${logId}/items`;
+
   try {
-    const response = await fetch(`${API_BASE}/logs/${logId}/items`, {
-      method: 'POST',
+    const response = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
@@ -181,6 +188,7 @@ export default function LogSection({
   const [fetchingDdIndices, setFetchingDdIndices] = useState<number[]>([]);
   const [deferrals, setDeferrals] = useState<any[]>([]);
   const [deferralErrors, setDeferralErrors] = useState<string[]>([]);
+  const prevLogEntries = useRef<LogEntry[]>(logEntries);
 
   // Fetch deferrals on component mount
   useEffect(() => {
@@ -317,6 +325,8 @@ export default function LogSection({
 
   const handleAuthClick = async (type: string, index: number) => {
     const entry = logEntries[index];
+
+    // Validate actionDetails
     if (!entry.actionDetails || entry.actionDetails.trim() === '') {
       const updatedErrors = [...descriptionErrors];
       updatedErrors[index] = 'Action Details are required';
@@ -325,28 +335,71 @@ export default function LogSection({
       return;
     }
 
+    if (type === 'Action Auth' && !entry.shortSignAuthId) {
+      alert('First short sign must be signed then authorized.');
+      return;
+    }
+
+    // Save the log item before opening the auth modal to ensure updated_id is set
     const savedItem = await saveLogItem(currentLogId, entry, index);
     if (savedItem) {
       setLogEntries((prev) =>
         prev.map((e, i) =>
-          i === index ? { ...e, updated_id: savedItem.id, displayNumber: savedItem.displayNumber, ddNo: savedItem.ddNo || e.ddNo } : e
+          i === index
+            ? {
+                ...e,
+                updated_id: savedItem.id || e.updated_id,
+                displayNumber: savedItem.displayNumber || e.displayNumber,
+                ddNo: savedItem.ddNo || e.ddNo,
+              }
+            : e
         )
       );
+      // Proceed to open auth modal only if save is successful
       openAuthModal(type, index);
     }
   };
 
+  // Function to handle post-authentication save
+  const handlePostAuthSave = async (index: number, authData: { shortSignAuthId?: string; shortSignAuthName?: string; actionAuthId?: string; actionAuthName?: string }) => {
+    const updatedEntries = [...logEntries];
+    const entry = updatedEntries[index];
+
+    // Update the entry with authentication data
+    updatedEntries[index] = {
+      ...entry,
+      shortSignAuthId: authData.shortSignAuthId || entry.shortSignAuthId,
+      shortSignAuthName: authData.shortSignAuthName || entry.shortSignAuthName,
+      actionAuthId: authData.actionAuthId || entry.actionAuthId,
+      actionAuthName: authData.actionAuthName || entry.actionAuthName,
+    };
+
+    // Save the updated entry to the database
+    const savedItem = await saveLogItem(currentLogId, updatedEntries[index], index);
+    if (savedItem) {
+      updatedEntries[index] = {
+        ...updatedEntries[index],
+        updated_id: savedItem.id || updatedEntries[index].updated_id,
+        displayNumber: savedItem.displayNumber || updatedEntries[index].displayNumber,
+        ddNo: savedItem.ddNo || updatedEntries[index].ddNo,
+      };
+      setLogEntries(updatedEntries);
+    }
+  };
+
+  // Modified useEffect to handle post-auth save
+  useEffect(() => {
+    async function loadDeferrals() {
+      const fetchedDeferrals = await fetchDeferrals();
+      setDeferrals(fetchedDeferrals);
+      setDeferralErrors(new Array(logEntries.length).fill(''));
+    }
+    loadDeferrals();
+  }, []);
+
   return (
     <div className="bg-gray-100 min-h-screen flex justify-center">
       <div className="bg-white border border-gray-200 rounded-lg p-4 shadow w-full max-w-[1200px] flex flex-col">
-        {/* <div className="flex justify-end mb-4">
-          <button
-            onClick={addNewLogEntry}
-            className="bg-[#004051] text-white px-6 py-2 rounded-md hover:bg-[#00363f]"
-          >
-            Add New Log Entry
-          </button>
-        </div> */}
         <div className="p-4 space-y-6">
           {isFetchingLogItems ? (
             <div className="flex flex-col items-center justify-center h-[300px]">
@@ -378,17 +431,6 @@ export default function LogSection({
                     key={`log-entry-${entry.updated_id || index}`}
                     className={`border border-gray-300 rounded-lg mb-6 p-4 sm:p-6 shadow-sm space-y-6 ${isFullyAuthorized ? 'bg-[#E0F7FA]' : 'bg-gray-50'}`}
                   >
-                    {/* <div className="flex justify-between items-center">
-                      <h1 className="text-xl font-bold text-[#004051]">
-                        {entry.displayNumber || index + 1}.
-                      </h1>
-                      <button
-                        onClick={() => removeLogEntry(index)}
-                        className="bg-red-600 text-white px-3 py-1 text-sm rounded-md hover:bg-red-700"
-                      >
-                        Remove Entry
-                      </button>
-                    </div> */}
                     <div className="flex flex-col gap-4 border-b border-gray-200 pb-4">
                       <div className="flex flex-wrap md:flex-nowrap items-start gap-4">
                         <div className="flex flex-col flex-1 gap-4">
@@ -542,7 +584,7 @@ export default function LogSection({
                       </div>
                       <div className="flex flex-col items-start gap-2 min-w-[160px] pt-[30px]">
                         <div className="flex flex-row flex-wrap items-center gap-2 w-full overflow-x-auto px-2">
-                          {!entry.shortSignAuthId ? (
+                          {!entry.shortSignAuthId && (
                             <button
                               type="button"
                               className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : ''} min-w-[120px]`}
@@ -550,16 +592,17 @@ export default function LogSection({
                             >
                               Short Sign
                             </button>
-                          ) : ''}
-                          {!entry.actionAuthId ? (
+                          )}
+                          {!entry.actionAuthId && (
                             <button
                               type="button"
-                              className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${!entry.shortSignAuthId || isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : ''} min-w-[120px]`}
+                              className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm min-w-[120px]`}
                               onClick={() => handleAuthClick('Action Auth', index)}
                             >
                               Auth
                             </button>
-                          ) : (
+                          )}
+                          {entry.actionAuthId && (
                             <div className="flex flex-row flex-wrap items-center gap-2 w-full min-w-[120px]">
                               <div className="font-medium text-gray-700 min-w-[100px]">
                                 AUTH ID: <span className="font-medium text-gray-800">{entry.actionAuthId}</span>

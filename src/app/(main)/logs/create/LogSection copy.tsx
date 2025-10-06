@@ -108,7 +108,6 @@ const normalizeMelCat = (cat: string): string => {
 
 // Convert backend ddType to display format (e.g., "M" -> "Major (M)")
 const displayDdType = (ddType: string): string => {
-  console.log("ddType",ddType)
   if (ddType === 'M') return 'Major (M)';
   if (ddType === 'N') return 'Minor (N)';
   return ddType || '';
@@ -118,6 +117,53 @@ const displayDdType = (ddType: string): string => {
 const displayMelCat = (cat: string): string => {
   if (['A', 'B', 'C', 'D', 'U'].includes(cat)) return `Cat ${cat}`;
   return cat || 'Cat A'; // Default to 'Cat A' for display
+};
+
+// Save or update a single log item
+const saveLogItem = async (logId: string, entry: LogEntry, index: number) => {
+  if (!logId) {
+    alert('No log selected. Please select a log first.');
+    return null;
+  }
+
+  const payload = {
+    logItem: {
+      id: entry.updated_id || undefined,
+      class: entry.class,
+      raisedBy: entry.raisedBy,
+      defectDetails: entry.defectDetails,
+      actionDetails: entry.actionDetails,
+      ddChecked: entry.ddChecked,
+      ddAction: entry.ddAction,
+      ddType: normalizeDdType(entry.ddType),
+      ddNo: entry.ddNo,
+      melCdlRef: entry.melCdlRef,
+      cat: normalizeMelCat(entry.cat),
+      indInspChecked: entry.indInspChecked,
+      sdr: entry.sdr,
+      mmsgFc: entry.mmsgFc,
+      ata: entry.ata,
+      components: entry.componentRows,
+    },
+    createdBy: 'user-id',
+  };
+
+  try {
+    const response = await fetch(`${API_BASE}/logs/${logId}/items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) throw new Error('Failed to save log item');
+
+    const data = await response.json();
+    return data.savedLogItem;
+  } catch (error) {
+    console.error('❌ Save log item error:', error);
+    alert('Error saving log item. Please try again.');
+    return null;
+  }
 };
 
 export default function LogSection({
@@ -132,17 +178,16 @@ export default function LogSection({
   isFetchingLogItems,
 }: LogSectionProps) {
   const router = useRouter();
-  const [isSaving, setIsSaving] = useState(false);
   const [fetchingDdIndices, setFetchingDdIndices] = useState<number[]>([]);
-  const [deferrals, setDeferrals] = useState<any[]>([]); // Store all deferrals for dropdown
-  const [deferralErrors, setDeferralErrors] = useState<string[]>([]); // Store errors for deferral fetching
+  const [deferrals, setDeferrals] = useState<any[]>([]);
+  const [deferralErrors, setDeferralErrors] = useState<string[]>([]);
 
   // Fetch deferrals on component mount
   useEffect(() => {
     async function loadDeferrals() {
       const fetchedDeferrals = await fetchDeferrals();
       setDeferrals(fetchedDeferrals);
-      setDeferralErrors(new Array(logEntries.length).fill('')); // Initialize errors
+      setDeferralErrors(new Array(logEntries.length).fill(''));
     }
     loadDeferrals();
   }, []);
@@ -152,20 +197,16 @@ export default function LogSection({
     const updatedEntries = [...logEntries];
     updatedEntries[index] = { ...updatedEntries[index], [field]: value };
 
-    // Clear deferral error for this index
     const updatedErrors = [...deferralErrors];
     updatedErrors[index] = '';
     setDeferralErrors(updatedErrors);
 
-    // Handle DD Action change
     if (field === 'ddAction') {
-      // Clear related fields when DD Action changes
       updatedEntries[index].ddNo = '';
       updatedEntries[index].ddType = '';
       updatedEntries[index].melCdlRef = '';
-      updatedEntries[index].cat = 'Cat A'; // Reset to default 'Cat A'
+      updatedEntries[index].cat = 'Cat A';
 
-      // If "Raised (R)" is selected, fetch the next type_no
       if (value === 'Raised (R)') {
         setFetchingDdIndices((prev) => [...prev, index]);
         try {
@@ -182,7 +223,6 @@ export default function LogSection({
       }
     }
 
-    // Handle DD No selection for Worked/Cleared
     if (field === 'ddNo' && ['Worked (W)', 'Cleared (C)'].includes(updatedEntries[index].ddAction)) {
       setFetchingDdIndices((prev) => [...prev, index]);
       try {
@@ -199,7 +239,7 @@ export default function LogSection({
           setDeferralErrors(updatedErrors);
           updatedEntries[index].ddType = '';
           updatedEntries[index].melCdlRef = '';
-          updatedEntries[index].cat = 'Cat A'; // Default to 'Cat A'
+          updatedEntries[index].cat = 'Cat A';
         }
       } catch (error) {
         console.error('❌ Error fetching deferral data:', error);
@@ -211,92 +251,6 @@ export default function LogSection({
     }
 
     setLogEntries(updatedEntries);
-  };
-
-  const handleSave = async () => {
-    const errors: string[] = [];
-    logEntries.forEach((entry, index) => {
-      if (!entry.raisedBy || !entry.actionDetails) {
-        errors[index] = 'Raised By and Action Details are required';
-      } else {
-        errors[index] = '';
-      }
-    });
-    setDescriptionErrors(errors);
-
-    if (errors.some((err) => err !== '')) {
-      setShowError(true);
-      return;
-    }
-
-    if (!currentLogId) {
-      alert('No log selected. Please select a log first.');
-      return;
-    }
-
-    setIsSaving(true);
-
-    const payload = {
-      logEntries: logEntries.map((entry) => ({
-        id: entry.updated_id || undefined,
-        class: entry.class,
-        raisedBy: entry.raisedBy,
-        defectDetails: entry.defectDetails,
-        actionDetails: entry.actionDetails,
-        ddChecked: entry.ddChecked,
-        ddAction: entry.ddAction,
-        ddType: normalizeDdType(entry.ddType),
-        ddNo: entry.ddNo,
-        melCdlRef: entry.melCdlRef,
-        cat: normalizeMelCat(entry.cat),
-        indInspChecked: entry.indInspChecked,
-        sdr: entry.sdr,
-        mmsgFc: entry.mmsgFc,
-        ata: entry.ata,
-        components: entry.componentRows,
-      })),
-      status: 1,
-      updatedBy: 'user-id',
-    };
-
-    console.log('📤 Sending payload:', JSON.stringify(payload, null, 2));
-
-    try {
-      const response = await fetch(`${API_BASE}/logs/${currentLogId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) throw new Error('Failed to update log');
-
-      const data = await response.json();
-      console.log('✅ Response:', data);
-
-      if (data.newLogItems) {
-        const updatedEntries = logEntries.map((entry, index) => {
-          const newItem = data.newLogItems.find((item: any) => item.displayNumber === index + 1);
-          if (newItem) {
-            return {
-              ...entry,
-              updated_id: newItem.id || entry.updated_id,
-              displayNumber: newItem.displayNumber || entry.displayNumber,
-              ddNo: newItem.ddNo || entry.ddNo, // Update ddNo from backend
-            };
-          }
-          return entry;
-        });
-        setLogEntries(updatedEntries);
-      }
-
-      setShowError(false);
-      alert('Log items saved successfully!');
-    } catch (error) {
-      console.error('❌ Update error:', error);
-      alert('Error updating log items. Please try again.');
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   const addNewLogEntry = () => {
@@ -311,10 +265,25 @@ export default function LogSection({
     setDeferralErrors([...deferralErrors, '']);
   };
 
-  const removeLogEntry = (index: number) => {
+  const removeLogEntry = async (index: number) => {
+    const entry = logEntries[index];
+    if (entry.updated_id) {
+      try {
+        const response = await fetch(`${API_BASE}/logs/${currentLogId}/items/${entry.updated_id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!response.ok) throw new Error('Failed to delete log item');
+      } catch (error) {
+        console.error('❌ Delete log item error:', error);
+        alert('Error deleting log item. Please try again.');
+        return;
+      }
+    }
+
     const updatedEntries = [...logEntries];
     updatedEntries.splice(index, 1);
-    setLogEntries(updatedEntries);
+    setLogEntries(updatedEntries.map((e, i) => ({ ...e, displayNumber: i + 1 })));
     const updatedErrors = [...descriptionErrors];
     updatedErrors.splice(index, 1);
     setDescriptionErrors(updatedErrors);
@@ -346,27 +315,38 @@ export default function LogSection({
     setLogEntries(updatedEntries);
   };
 
-  const handleAuth = (index: number, date: string) => {
-    setLogEntries((prev) => {
-      const updated = [...prev];
-      updated[index].authenticated = true;
-      updated[index].date = date;
-      return updated;
-    });
+  const handleAuthClick = async (type: string, index: number) => {
+    const entry = logEntries[index];
+    if (!entry.actionDetails || entry.actionDetails.trim() === '') {
+      const updatedErrors = [...descriptionErrors];
+      updatedErrors[index] = 'Action Details are required';
+      setDescriptionErrors(updatedErrors);
+      setShowError(true);
+      return;
+    }
+
+    const savedItem = await saveLogItem(currentLogId, entry, index);
+    if (savedItem) {
+      setLogEntries((prev) =>
+        prev.map((e, i) =>
+          i === index ? { ...e, updated_id: savedItem.id, displayNumber: savedItem.displayNumber, ddNo: savedItem.ddNo || e.ddNo } : e
+        )
+      );
+      openAuthModal(type, index);
+    }
   };
 
   return (
     <div className="bg-gray-100 min-h-screen flex justify-center">
       <div className="bg-white border border-gray-200 rounded-lg p-4 shadow w-full max-w-[1200px] flex flex-col">
-        <div className="flex justify-end mb-4">
+        {/* <div className="flex justify-end mb-4">
           <button
-            onClick={handleSave}
-            disabled={isSaving || isFetchingLogItems}
-            className="bg-[#004051] text-white px-6 py-1 rounded-md hover:bg-[#00363f] disabled:opacity-50"
+            onClick={addNewLogEntry}
+            className="bg-[#004051] text-white px-6 py-2 rounded-md hover:bg-[#00363f]"
           >
-            {isSaving ? 'Saving...' : 'Save Log Items'}
+            Add New Log Entry
           </button>
-        </div>
+        </div> */}
         <div className="p-4 space-y-6">
           {isFetchingLogItems ? (
             <div className="flex flex-col items-center justify-center h-[300px]">
@@ -398,11 +378,17 @@ export default function LogSection({
                     key={`log-entry-${entry.updated_id || index}`}
                     className={`border border-gray-300 rounded-lg mb-6 p-4 sm:p-6 shadow-sm space-y-6 ${isFullyAuthorized ? 'bg-[#E0F7FA]' : 'bg-gray-50'}`}
                   >
-                    <div className="flex justify-between items-center">
+                    {/* <div className="flex justify-between items-center">
                       <h1 className="text-xl font-bold text-[#004051]">
                         {entry.displayNumber || index + 1}.
                       </h1>
-                    </div>
+                      <button
+                        onClick={() => removeLogEntry(index)}
+                        className="bg-red-600 text-white px-3 py-1 text-sm rounded-md hover:bg-red-700"
+                      >
+                        Remove Entry
+                      </button>
+                    </div> */}
                     <div className="flex flex-col gap-4 border-b border-gray-200 pb-4">
                       <div className="flex flex-wrap md:flex-nowrap items-start gap-4">
                         <div className="flex flex-col flex-1 gap-4">
@@ -415,7 +401,6 @@ export default function LogSection({
                                     className={`border ${entry.class && !/^(L|P|LI)$/i.test(entry.class) ? 'border-red-500' : 'border-gray-300'} rounded px-3 py-2 text-base focus:ring-2 focus:ring-[#004051]`}
                                     value={entry.class}
                                     onChange={(e) => handleLogInputChange(index, 'class', e.target.value)}
-                                    disabled={(Boolean(entry.authenticated) || isFullyAuthorized) as boolean}
                                   >
                                     <option value="">Select Class</option>
                                     <option value="L">Line-based (L)</option>
@@ -435,11 +420,10 @@ export default function LogSection({
                               <div className="flex flex-col w-[300px]">
                                 <input
                                   type="text"
-                                  className={`w-full border border-gray-300 rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051] ${!entry.raisedBy && showError ? 'border-red-500' : 'border-gray-300'}`}
+                                  className={`w-full border ${!entry.raisedBy && showError ? 'border-red-500' : 'border-gray-300'} rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051]`}
                                   placeholder="Auth ID / (Staff ID)"
                                   value={entry.raisedBy}
                                   onChange={(e) => handleLogInputChange(index, 'raisedBy', e.target.value)}
-                                  disabled={(Boolean(entry.authenticated) || isFullyAuthorized) as boolean}
                                 />
                                 {!entry.raisedBy && showError && (
                                   <span className="text-red-500 text-xs mt-1">Raised by is required</span>
@@ -461,7 +445,6 @@ export default function LogSection({
                             e.target.style.height = 'auto';
                             e.target.style.height = `${e.target.scrollHeight}px`;
                           }}
-                          disabled={!!isFullyAuthorized}
                         />
                       </div>
                     </div>
@@ -476,7 +459,6 @@ export default function LogSection({
                               className="w-full border border-gray-300 rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051]"
                               value={entry.ata}
                               onChange={(e) => handleLogInputChange(index, 'ata', e.target.value)}
-                              disabled={!!isFullyAuthorized}
                             />
                           </div>
                         </div>
@@ -489,7 +471,6 @@ export default function LogSection({
                               className="w-full border border-gray-300 rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051]"
                               value={entry.mmsgFc}
                               onChange={(e) => handleLogInputChange(index, 'mmsgFc', e.target.value)}
-                              disabled={!!isFullyAuthorized}
                             />
                           </div>
                         </div>
@@ -500,7 +481,6 @@ export default function LogSection({
                               className="h-5 w-5 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
                               checked={entry.sdr}
                               onChange={(e) => handleLogInputChange(index, 'sdr', e.target.checked)}
-                              disabled={!!isFullyAuthorized}
                             />
                             <label className="text-sm font-medium text-gray-600">SDR</label>
                           </div>
@@ -510,7 +490,6 @@ export default function LogSection({
                               checked={entry.ddChecked}
                               onChange={(e) => handleLogInputChange(index, 'ddChecked', e.target.checked)}
                               className="h-5 w-5 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
-                              disabled={!!isFullyAuthorized}
                             />
                             <label className="text-sm font-medium text-gray-600">DD</label>
                           </div>
@@ -520,7 +499,6 @@ export default function LogSection({
                               checked={entry.indInspChecked}
                               onChange={(e) => handleLogInputChange(index, 'indInspChecked', e.target.checked)}
                               className="h-5 w-5 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
-                              disabled={!!isFullyAuthorized}
                             />
                             <label className="text-sm font-medium text-gray-600">IND INSP</label>
                           </div>
@@ -547,7 +525,6 @@ export default function LogSection({
                               setDescriptionErrors(updatedErrors);
                             }
                           }}
-                          disabled={!!isFullyAuthorized}
                         />
                         {descriptionErrors[index] && (
                           <p className="text-red-600 text-sm mt-1">{descriptionErrors[index]}</p>
@@ -569,16 +546,7 @@ export default function LogSection({
                             <button
                               type="button"
                               className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : ''} min-w-[120px]`}
-                              onClick={() => {
-                                if (!entry.actionDetails || entry.actionDetails.trim() === '') {
-                                  const updatedErrors = [...descriptionErrors];
-                                  updatedErrors[index] = 'Action Details are required';
-                                  setDescriptionErrors(updatedErrors);
-                                  return;
-                                }
-                                openAuthModal('Short Sign Auth', index);
-                              }}
-                              disabled={!!isFullyAuthorized}
+                              onClick={() => handleAuthClick('Short Sign Auth', index)}
                             >
                               Short Sign
                             </button>
@@ -587,16 +555,7 @@ export default function LogSection({
                             <button
                               type="button"
                               className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${!entry.shortSignAuthId || isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : ''} min-w-[120px]`}
-                              onClick={() => {
-                                if (!entry.actionDetails || entry.actionDetails.trim() === '') {
-                                  const updatedErrors = [...descriptionErrors];
-                                  updatedErrors[index] = 'Action Details are required';
-                                  setDescriptionErrors(updatedErrors);
-                                  return;
-                                }
-                                openAuthModal('Action Auth', index);
-                              }}
-                              disabled={(!entry.shortSignAuthId || isFullyAuthorized) as boolean}
+                              onClick={() => handleAuthClick('Action Auth', index)}
                             >
                               Auth
                             </button>
@@ -633,8 +592,6 @@ export default function LogSection({
                             name: 'ddType',
                             options: ['Major (M)', 'Minor (N)'],
                             value: displayDdType(entry.ddType),
-                            // invalid: entry.ddType && !['Major (M)', 'Minor (N)'].includes(entry.ddType),
-                            // error: 'Select a valid DD Type',
                             placeholder: 'Type',
                           },
                           {
@@ -662,8 +619,6 @@ export default function LogSection({
                             name: 'cat',
                             options: ['Cat A', 'Cat B', 'Cat C', 'Cat D', 'Cat U'],
                             value: displayMelCat(entry.cat),
-                            // invalid: entry.cat && !['Cat A', 'Cat B', 'Cat C', 'Cat D', 'Cat U'].includes(entry.cat),
-                            // error: 'Select a valid Category',
                             placeholder: 'Cat',
                           },
                         ].map((field, i) => (
@@ -688,7 +643,6 @@ export default function LogSection({
                                     e.target.value
                                   )
                                 }
-                                disabled={!!isFullyAuthorized || (field.name === 'ddNo' && isFetchingDd)}
                               >
                                 <option value="">{field.placeholder || `Choose ${field.label}`}</option>
                                 {field.options?.map((opt) => (
@@ -715,7 +669,6 @@ export default function LogSection({
                                       e.target.value
                                     )
                                   }
-                                  disabled={!!isFullyAuthorized || (field.name === 'ddNo' && isDdActionRaised) || (field.name === 'ddNo' && isFetchingDd)}
                                 />
                                 {field.name === 'ddNo' && isFetchingDd && (
                                   <div className="absolute right-2 top-2 animate-spin h-4 w-4 text-gray-500">

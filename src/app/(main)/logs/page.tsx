@@ -9,7 +9,20 @@ import AuthModal from './create/AuthModal';
 import { LogEntry, AuthData } from './types';
 import { BiBorderAll } from 'react-icons/bi';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+
+interface Airport {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface AuthDetails {
+  svcOption: string;
+  authId: string;
+  authName: string;
+  authDate: string;
+}
 
 const initialLogEntry: LogEntry = {
   id: 1,
@@ -60,6 +73,7 @@ interface Log {
     takeOffDate: string;
     landingDate: string;
     acftRelease: boolean;
+    currentFlight: boolean;
   };
 }
 
@@ -75,10 +89,10 @@ export default function FormElementsPage() {
   const [logEntries, setLogEntries] = useState<LogEntry[]>([{ ...initialLogEntry }]);
   const [authModal, setAuthModal] = useState<null | { type: string; index: number }>(null);
   const [checkedItems, setCheckedItems] = useState<{ [key: string]: boolean }>({});
-  const [authDetails, setAuthDetails] = useState<Record<string, any>>({});
+  const [authDetails, setAuthDetails] = useState<{ [key: string]: AuthDetails }>({});
   const [isFetchingPageNo, setIsFetchingPageNo] = useState(true);
-  const [isFetchingLogItems, setIsFetchingLogItems] = useState(false); // New state for log items loading
-  const [logPageNo, setLogPageNo] = useState<string>(''); // Initial default, will be updated
+  const [isFetchingLogItems, setIsFetchingLogItems] = useState(false);
+  const [logPageNo, setLogPageNo] = useState<string>('');
   const [authData, setAuthData] = useState<AuthData>({
     authId: '',
     authName: '',
@@ -91,79 +105,154 @@ export default function FormElementsPage() {
   const [showError, setShowError] = useState(false);
   const [showLogListModal, setShowLogListModal] = useState(false);
   const [selectedLogIndex, setSelectedLogIndex] = useState<number>(0);
-  const [logs, setLogs] = useState<Log[]>([]); // State to store fetched logs
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [airports, setAirports] = useState<Airport[]>([]);
 
-  // Fetch logs and their associated flight details
+  // Fetch airports
   useEffect(() => {
-    async function fetchLogsAndFlights() {
+    async function fetchAirports() {
       try {
-        setIsFetchingPageNo(true);
-        const logsResponse = await fetch(`${API_BASE}/logs`);
-        if (!logsResponse.ok) throw new Error(`Failed to fetch logs: ${logsResponse.status}`);
-
-        const logsData: Log[] = await logsResponse.json();
-        // Fetch flight details for each log
-        const logsWithFlightDetails = await Promise.all(
-          logsData.map(async (log) => {
-            if (log.flightId) {
-              const flightResponse = await fetch(`${API_BASE}/flights/${log.flightId}`);
-              if (flightResponse.ok) {
-                const flightData = await flightResponse.json();
-                return {
-                  ...log,
-                  flightDetails: {
-                    fltNo: flightData.fltNo,
-                    from: flightData.from,
-                    to: flightData.to,
-                    takeOff: flightData.takeOff,
-                    landing: flightData.landing,
-                    takeOffDate: flightData.takeOffDate,
-                    landingDate: flightData.landingDate,
-                    acftRelease: flightData.acftRelease,
-                  },
-                };
-              }
-            }
-            return log;
-          })
-        );
-
-        setLogs(logsWithFlightDetails);
-        // Set the latest log page number and load its log items
-        if (logsWithFlightDetails.length > 0) {
-          const latestLog = logsWithFlightDetails.reduce((latest, log) => {
-            const logDate = parseDate(log.createdAt);
-            const latestDate = parseDate(latest.createdAt);
-            if (!logDate) return latest;
-            if (!latestDate) return log;
-            return logDate > latestDate ? log : latest;
-          });
-          setLogPageNo(latestLog.logPageNo);
-          setSelectedLogIndex(0);
-          // Fetch log items for the latest log
-          await fetchLogItems(latestLog.id);
-        }
+        const airportsRes = await fetch(`${API_BASE}/flights/airports/list`);
+        if (!airportsRes.ok) throw new Error(`Failed to fetch airports: ${airportsRes.status}`);
+        const airportsData = await airportsRes.json();
+        setAirports(Array.isArray(airportsData) ? airportsData : []);
       } catch (err) {
-        console.error("Failed to fetch logs:", err);
-        setLogs([]);
-      } finally {
-        setIsFetchingPageNo(false);
+        console.error("Failed to fetch airports:", err);
+        setAirports([]);
       }
     }
+    fetchAirports();
+  }, []);
 
-    fetchLogsAndFlights();
+  // Fetch check authorizations for the current log
+  const fetchChecks = async (logId: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/checks/${logId}/checks`);
+      if (!response.ok) throw new Error('Failed to fetch check authorizations');
+      const data = await response.json();
+      if (data.checks && data.checks.length > 0) {
+        const checks = data.checks.reduce((acc: { [key: string]: AuthDetails }, check: any) => {
+          acc[check.type] = {
+            authId: check.authId,
+            authName: check.authName,
+            authDate: check.authDate,
+            svcOption: check.svcOption,
+          };
+          return acc;
+        }, {});
+        setAuthDetails(checks);
+        setCheckedItems(
+          Object.keys(checks).reduce((acc: { [key: string]: boolean }, key) => {
+            acc[key] = true;
+            return acc;
+          }, {})
+        );
+      } else {
+        setAuthDetails({});
+        setCheckedItems({});
+      }
+    } catch (err) {
+      console.error("Failed to fetch checks:", err);
+      setAuthDetails({});
+      setCheckedItems({});
+    }
+  };
+
+  // Get airport name by code
+  const getAirportName = (code: string) => {
+    const airport = airports.find((a) => a.code === code);
+    return airport ? airport.name : code;
+  };
+
+  // Fetch logs and their associated flight details
+  const refetchLogsAndFlights = async () => {
+    try {
+      setIsFetchingPageNo(true);
+      const logsResponse = await fetch(`${API_BASE}/logs`);
+      if (!logsResponse.ok) throw new Error(`Failed to fetch logs: ${logsResponse.status}`);
+
+      let logsData: Log[] = await logsResponse.json();
+
+      // Sort logs chronologically (ascending by createdAt)
+      logsData = logsData.sort((a, b) => {
+        const dateA = parseDate(a.createdAt);
+        const dateB = parseDate(b.createdAt);
+        return (dateA?.getTime() || 0) - (dateB?.getTime() || 0);
+      });
+
+      // Fetch flight details for each log
+      const logsWithFlightDetails = await Promise.all(
+        logsData.map(async (log) => {
+          if (log.flightId) {
+            const flightResponse = await fetch(`${API_BASE}/flights/${log.flightId}`);
+            if (flightResponse.ok) {
+              const flightData = await flightResponse.json();
+              return {
+                ...log,
+                flightDetails: {
+                  fltNo: flightData.fltNo,
+                  from: flightData.from,
+                  to: flightData.to,
+                  takeOff: flightData.takeOff,
+                  landing: flightData.landing,
+                  takeOffDate: flightData.takeOffDate,
+                  landingDate: flightData.landingDate,
+                  acftRelease: flightData.acftRelease,
+                  currentFlight: flightData.currentFlight,
+                },
+              };
+            }
+          }
+          return log;
+        })
+      );
+
+      setLogs(logsWithFlightDetails);
+
+      // Handle case when logsWithFlightDetails is empty
+      if (logsWithFlightDetails.length === 0) {
+        setLogPageNo('');
+        setSelectedLogIndex(0);
+        setIsFetchingPageNo(false);
+        return;
+      }
+
+      // Find the log with currentFlight: true, or fall back to the latest log
+      let selectedLog = logsWithFlightDetails.find((log) => log.flightDetails?.currentFlight === true);
+      let selectedIndex = logsWithFlightDetails.findIndex((log) => log.flightDetails?.currentFlight === true);
+
+      if (!selectedLog) {
+        selectedLog = logsWithFlightDetails[logsWithFlightDetails.length - 1];
+        selectedIndex = logsWithFlightDetails.length - 1;
+      }
+
+      setLogPageNo(selectedLog.logPageNo);
+      setSelectedLogIndex(selectedIndex);
+      await fetchLogItems(selectedLog.id);
+      await fetchChecks(selectedLog.id);
+    } catch (err) {
+      console.error("Failed to fetch logs:", err);
+      setLogs([]);
+      setLogPageNo('');
+      setSelectedLogIndex(0);
+    } finally {
+      setIsFetchingPageNo(false);
+    }
+  };
+
+  useEffect(() => {
+    refetchLogsAndFlights();
   }, []);
 
   // Function to fetch log items for a specific log
   async function fetchLogItems(logId: string) {
-    setIsFetchingLogItems(true); // Set loading state
+    setIsFetchingLogItems(true);
     try {
       const response = await fetch(`${API_BASE}/logs/${logId}`);
       if (!response.ok) throw new Error(`Failed to fetch log items: ${response.status}`);
       const logData = await response.json();
       const logItems = logData.items || [];
 
-      // Map log items to LogEntry type
       const mappedLogEntries: LogEntry[] = logItems.length > 0
         ? logItems.map((item: any, index: number) => ({
             ...initialLogEntry,
@@ -212,7 +301,7 @@ export default function FormElementsPage() {
       setLogEntries([{ ...initialLogEntry, id: 1, displayNumber: 1 }]);
       setDescriptionErrors(['']);
     } finally {
-      setIsFetchingLogItems(false); // Clear loading state
+      setIsFetchingLogItems(false);
     }
   }
 
@@ -222,6 +311,7 @@ export default function FormElementsPage() {
       setSelectedLogIndex(nextIndex);
       setLogPageNo(logs[nextIndex].logPageNo);
       fetchLogItems(logs[nextIndex].id);
+      fetchChecks(logs[nextIndex].id);
     }
   };
 
@@ -231,6 +321,7 @@ export default function FormElementsPage() {
       setSelectedLogIndex(prevIndex);
       setLogPageNo(logs[prevIndex].logPageNo);
       fetchLogItems(logs[prevIndex].id);
+      fetchChecks(logs[prevIndex].id);
     }
   };
 
@@ -248,7 +339,7 @@ export default function FormElementsPage() {
   const openAuthModal = (type: string, index: number) => {
     const today = new Date().toISOString().split("T")[0];
     const entry = logEntries[index];
-    const description = entry.actionDetails;
+    const description = entry?.actionDetails;
 
     if ((type === 'Short Sign Auth' || type === 'Action Auth') && (!description || description.trim() === '')) {
       const updatedErrors = [...descriptionErrors];
@@ -296,6 +387,7 @@ export default function FormElementsPage() {
           month: 'short',
           day: 'numeric',
         }),
+        svcOption: authModal.type === 'Letter' ? authDetails['Letter']?.svcOption || '' : '',
       },
     }));
 
@@ -326,8 +418,8 @@ export default function FormElementsPage() {
           showError={showError}
           setShowError={setShowError}
           openAuthModal={openAuthModal}
-          currentLogId={logs[selectedLogIndex]?.id || ''} // Pass current selected log ID
-          isFetchingLogItems={isFetchingLogItems} // Pass loading state
+          currentLogId={logs[selectedLogIndex]?.id || ''}
+          isFetchingLogItems={isFetchingLogItems}
         />
       ),
     },
@@ -346,6 +438,8 @@ export default function FormElementsPage() {
           setCheckedItems={setCheckedItems}
           authDetails={authDetails}
           setAuthDetails={setAuthDetails}
+          currentLogId={logs[selectedLogIndex]?.id || ''}
+          onChecksSaved={refetchLogsAndFlights}
         />
       ),
     },
@@ -360,6 +454,7 @@ export default function FormElementsPage() {
     setSelectedLogIndex(index);
     setLogPageNo(logs[index].logPageNo);
     fetchLogItems(logs[index].id);
+    fetchChecks(logs[index].id);
     setShowLogListModal(false);
     setActiveTab('Log');
   };
@@ -369,8 +464,17 @@ export default function FormElementsPage() {
   };
 
   const activeContent = tabs.find((tab) => tab.id === activeTab)?.content;
+
   return (
     <div className="space-y-6">
+      {(isFetchingPageNo || isFetchingLogItems) && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="flex flex-col items-center">
+            <div className="w-16 h-16 border-4 border-t-4 border-[#004051] border-opacity-50 rounded-full animate-spin border-t-[#06b6d4]"></div>
+            <p className="mt-4 text-white text-lg font-semibold">Loading...</p>
+          </div>
+        </div>
+      )}
       <div>
         <div className="mb-6 flex items-center justify-between">
           <ul className="flex gap-2 overflow-x-auto scrollbar-hide">
@@ -466,9 +570,18 @@ export default function FormElementsPage() {
                   <span>|</span>
                   <span>
                     Sector:{' '}
-                    {logs[selectedLogIndex]?.flightDetails
-                      ? `${logs[selectedLogIndex].flightDetails.from} (ETD ${logs[selectedLogIndex].flightDetails.takeOff}, ${logs[selectedLogIndex].flightDetails.takeOffDate}) → ${logs[selectedLogIndex].flightDetails.to} (ETA ${logs[selectedLogIndex].flightDetails.landing}, ${logs[selectedLogIndex].flightDetails.landingDate})`
-                      : 'N/A'}
+                    {logs[selectedLogIndex]?.flightDetails ? (
+                      <>
+                        {`${getAirportName(logs[selectedLogIndex].flightDetails.from)} (ETD ${logs[selectedLogIndex].flightDetails.takeOff}, ${logs[selectedLogIndex].flightDetails.takeOffDate}) → ${getAirportName(logs[selectedLogIndex].flightDetails.to)} (ETA ${logs[selectedLogIndex].flightDetails.landing}, ${logs[selectedLogIndex].flightDetails.landingDate})`}
+                        {logs[selectedLogIndex].flightLeg === 0 && (
+                          <span className="ml-2 px-2 py-1 text-xs font-semibold text-[#06b6d4] bg-[#06b6d4]/10 border border-[#06b6d4] rounded-full">
+                            Current Flight
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      'N/A'
+                    )}
                   </span>
                 </div>
               </div>
@@ -523,9 +636,18 @@ export default function FormElementsPage() {
                       <td className="p-3">{log.flightLeg}</td>
                       <td className="p-3">{log.flightDetails ? log.flightDetails.fltNo : 'N/A'}</td>
                       <td className="p-3">
-                        {log.flightDetails
-                          ? `${log.flightDetails.from} (ETD ${log.flightDetails.takeOff}, ${log.flightDetails.takeOffDate}) → ${log.flightDetails.to} (ETA ${log.flightDetails.landing}, ${log.flightDetails.landingDate})`
-                          : 'N/A'}
+                        {log.flightDetails ? (
+                          <>
+                            {`${getAirportName(log.flightDetails.from)} (ETD ${log.flightDetails.takeOff}, ${log.flightDetails.takeOffDate}) → ${getAirportName(log.flightDetails.to)} (ETA ${log.flightDetails.landing}, ${log.flightDetails.landingDate})`}
+                            {log.flightLeg === 0 && (
+                              <span className="ml-2 px-2 py-1 text-xs font-semibold text-[#06b6d4] bg-[#06b6d4]/10 border border-[#06b6d4] rounded-full">
+                                Current Flight
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          'N/A'
+                        )}
                       </td>
                       <td className="p-3">{log.flightDetails ? (log.flightDetails.acftRelease ? 'Yes' : 'No') : 'N/A'}</td>
                       <td className="p-3">
