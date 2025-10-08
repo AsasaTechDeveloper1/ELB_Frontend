@@ -87,7 +87,11 @@ function parseDate(input?: string | { _seconds: number; _nanoseconds: number }):
 export default function FormElementsPage() {
   const [activeTab, setActiveTab] = useState('Log');
   const [logEntries, setLogEntries] = useState<LogEntry[]>([{ ...initialLogEntry }]);
-  const [authModal, setAuthModal] = useState<null | { type: string; index: number }>(null);
+  const [authModal, setAuthModal] = useState<{
+    type: string;
+    index: number;
+    onSuccess: (authData: { authId: string; authName: string; password: string }) => void;
+  } | null>(null);
   const [checkedItems, setCheckedItems] = useState<{ [key: string]: boolean }>({});
   const [authDetails, setAuthDetails] = useState<{ [key: string]: AuthDetails }>({});
   const [isFetchingPageNo, setIsFetchingPageNo] = useState(true);
@@ -336,23 +340,6 @@ export default function FormElementsPage() {
     setDescriptionErrors([...descriptionErrors, '']);
   };
 
-  const openAuthModal = (type: string, index: number) => {
-    const today = new Date().toISOString().split("T")[0];
-    const entry = logEntries[index];
-    const description = entry?.actionDetails;
-
-    if ((type === 'Short Sign Auth' || type === 'Action Auth') && (!description || description.trim() === '')) {
-      const updatedErrors = [...descriptionErrors];
-      updatedErrors[index] = 'Action Detail is required';
-      setDescriptionErrors(updatedErrors);
-      return;
-    }
-
-    setAuthModal({ type, index });
-    setAuthData((prev) => ({ ...prev, date: today }));
-    setCheckedItems((prev) => ({ ...prev, [type]: true }));
-  };
-
   const saveAuthorization = () => {
     if (!authModal) return;
 
@@ -398,6 +385,29 @@ export default function FormElementsPage() {
 
     setAuthModal(null);
     setAuthData({ authId: '', authName: '', password: '', sign: '', date: '', expDate: '' });
+  };
+
+  const openAuthModal = (type: string, index: number) => {
+    const today = new Date().toISOString().split("T")[0];
+    const entry = logEntries[index];
+    const description = entry?.actionDetails;
+
+    if ((type === 'Short Sign Auth' || type === 'Action Auth') && (!description || description.trim() === '')) {
+      const updatedErrors = [...descriptionErrors];
+      updatedErrors[index] = 'Action Detail is required';
+      setDescriptionErrors(updatedErrors);
+      return;
+    }
+
+    setAuthModal({
+      type,
+      index,
+      onSuccess: (authData: { authId: string; authName: string; password: string }) => {
+        saveAuthorization();
+      },
+    });
+    setAuthData((prev) => ({ ...prev, date: today }));
+    setCheckedItems((prev) => ({ ...prev, [type]: true }));
   };
 
   const tabs = [
@@ -595,7 +605,6 @@ export default function FormElementsPage() {
         authData={authData}
         setAuthData={setAuthData}
         setAuthModal={setAuthModal}
-        saveAuthorization={saveAuthorization}
         setCheckedItems={setCheckedItems}
       />
       {showLogListModal && (
