@@ -11,7 +11,7 @@ interface LogSectionProps {
   setDescriptionErrors: React.Dispatch<React.SetStateAction<string[]>>;
   showError: boolean;
   setShowError: React.Dispatch<React.SetStateAction<boolean>>;
-  openAuthModal: (type: string, index: number) => void;
+  openAuthModal: (type: string, index: number, onSuccess: (authData: { authId: string; authName: string }) => void) => void;
   currentLogId: string;
   isFetchingLogItems: boolean;
 }
@@ -340,62 +340,53 @@ export default function LogSection({
       return;
     }
 
-    // Save the log item before opening the auth modal to ensure updated_id is set
-    const savedItem = await saveLogItem(currentLogId, entry, index);
-    if (savedItem) {
-      setLogEntries((prev) =>
-        prev.map((e, i) =>
-          i === index
-            ? {
-                ...e,
-                updated_id: savedItem.id || e.updated_id,
-                displayNumber: savedItem.displayNumber || e.displayNumber,
-                ddNo: savedItem.ddNo || e.ddNo,
-              }
-            : e
-        )
-      );
-      // Proceed to open auth modal only if save is successful
-      openAuthModal(type, index);
-    }
-  };
+    // Open auth modal with a callback to save the log item after authorization
+    openAuthModal(type, index, async (authData) => {
+      console.log(authData, "fetch authData");
+      console.log(type, "fetch type");
+      const updatedEntries = [...logEntries];
+      const entry = updatedEntries[index];
 
-  // Function to handle post-authentication save
-  const handlePostAuthSave = async (index: number, authData: { shortSignAuthId?: string; shortSignAuthName?: string; actionAuthId?: string; actionAuthName?: string }) => {
-    const updatedEntries = [...logEntries];
-    const entry = updatedEntries[index];
-
-    // Update the entry with authentication data
-    updatedEntries[index] = {
-      ...entry,
-      shortSignAuthId: authData.shortSignAuthId || entry.shortSignAuthId,
-      shortSignAuthName: authData.shortSignAuthName || entry.shortSignAuthName,
-      actionAuthId: authData.actionAuthId || entry.actionAuthId,
-      actionAuthName: authData.actionAuthName || entry.actionAuthName,
-    };
-
-    // Save the updated entry to the database
-    const savedItem = await saveLogItem(currentLogId, updatedEntries[index], index);
-    if (savedItem) {
-      updatedEntries[index] = {
-        ...updatedEntries[index],
-        updated_id: savedItem.id || updatedEntries[index].updated_id,
-        displayNumber: savedItem.displayNumber || updatedEntries[index].displayNumber,
-        ddNo: savedItem.ddNo || updatedEntries[index].ddNo,
-      };
+      // Update authorization data
+      if (type === 'Short Sign Auth') {
+        updatedEntries[index] = {
+          ...entry,
+          shortSignAuthId: authData.authId,
+          shortSignAuthName: authData.authName,
+        };
+        // Save the log item after Short Sign Auth
+        console.log('Saving log item after Short Sign Auth');
+        const savedItem = await saveLogItem(currentLogId, updatedEntries[index], index);
+        if (savedItem) {
+          updatedEntries[index] = {
+            ...updatedEntries[index],
+            updated_id: savedItem.id || updatedEntries[index].updated_id,
+            displayNumber: savedItem.displayNumber || updatedEntries[index].displayNumber,
+            ddNo: savedItem.ddNo || updatedEntries[index].ddNo,
+          };
+        }
+      } else if (type === 'Action Auth') {
+        updatedEntries[index] = {
+          ...entry,
+          actionAuthId: authData.authId,
+          actionAuthName: authData.authName,
+        };
+        // Update the log item after Action Auth
+        console.log('Updating log item after Action Auth');
+        const savedItem = await saveLogItem(currentLogId, updatedEntries[index], index);
+        if (savedItem) {
+          updatedEntries[index] = {
+            ...updatedEntries[index],
+            updated_id: savedItem.id || updatedEntries[index].updated_id,
+            displayNumber: savedItem.displayNumber || updatedEntries[index].displayNumber,
+            ddNo: savedItem.ddNo || updatedEntries[index].ddNo,
+          };
+        }
+      }
+      console.log(updatedEntries, "updatedEntries");
       setLogEntries(updatedEntries);
-    }
+    });
   };
-
-  // Modified useEffect to handle post-auth save
-  useEffect(() => {
-    async function loadDeferrals() {
-      const fetchedDeferrals = await fetchDeferrals();
-      setDeferrals(fetchedDeferrals);
-      setDeferralErrors(new Array(logEntries.length).fill(''));
-    }
-    loadDeferrals();
-  }, []);
 
   return (
     <div className="bg-gray-100 min-h-screen flex justify-center">
@@ -835,6 +826,15 @@ export default function LogSection({
                         </button>
                       </div>
                     </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => removeLogEntry(index)}
+                        className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700"
+                      >
+                        Remove Log Entry
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -843,6 +843,15 @@ export default function LogSection({
                 <p className="text-md text-gray-800 leading-relaxed">
                   Enter defect and action details accurately. Ensure all fields are completed as per aviation maintenance protocols.
                 </p>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={addNewLogEntry}
+                  type="button"
+                  className="bg-[#004051] text-white text-sm font-medium py-2 px-4 rounded shadow transition hover:bg-[#00363f]"
+                >
+                  + Add New Log Entry
+                </button>
               </div>
             </>
           )}

@@ -6,7 +6,7 @@ import FlightDetailsSection from './create/FlightDetailsSection';
 import FluidsSection from './create/FluidsSection';
 import ChecksSection from './create/ChecksSection';
 import AuthModal from './create/AuthModal';
-import { LogEntry, AuthData } from './types';
+import { LogEntry, AuthData, AuthDetails, AuthModalState } from './types';
 import { BiBorderAll } from 'react-icons/bi';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
@@ -16,45 +16,6 @@ interface Airport {
   code: string;
   name: string;
 }
-
-interface AuthDetails {
-  svcOption: string;
-  authId: string;
-  authName: string;
-  authDate: string;
-}
-
-const initialLogEntry: LogEntry = {
-  id: 1,
-  updated_id: "",
-  displayNumber: 1,
-  class: '',
-  raisedBy: '',
-  defectDetails: '',
-  mmsgFc: '',
-  ata: '',
-  sdr: false,
-  actionDetails: '',
-  ddChecked: false,
-  ddAction: '',
-  ddType: '',
-  ddNo: '',
-  melCdlRef: '',
-  cat: '',
-  indInspChecked: false,
-  componentRows: [{ partNo: '', serialOn: '', partOff: '', serialOff: '', grn: '' }],
-  shortSignAuthId: '',
-  shortSignAuthName: '',
-  actionAuthId: '',
-  actionAuthName: '',
-  attemptedAuth: false,
-  raisedByValid: false,
-  date: '',
-  authenticated: false,
-  ddDate1: '',
-  ddSign1: '',
-  ddAuth1: '',
-};
 
 interface Log {
   id: string;
@@ -77,22 +38,56 @@ interface Log {
   };
 }
 
+const initialLogEntry: LogEntry = {
+  id: 1,
+  updated_id: '',
+  displayNumber: 1,
+  class: '',
+  raisedBy: '',
+  defectDetails: '',
+  mmsgFc: '',
+  ata: '',
+  sdr: false,
+  actionDetails: '',
+  ddChecked: false,
+  ddAction: '',
+  ddType: '',
+  ddNo: '',
+  melCdlRef: '',
+  cat: 'Cat A',
+  indInspChecked: false,
+  componentRows: [{ partNo: '', serialOn: '', partOff: '', serialOff: '', grn: '' }],
+  shortSignAuthId: '',
+  shortSignAuthName: '',
+  actionAuthId: '',
+  actionAuthName: '',
+  attemptedAuth: false,
+  raisedByValid: false,
+  date: '',
+  authenticated: false,
+  ddDate1: '',
+  ddSign1: '',
+  ddAuth1: '',
+};
+
 function parseDate(input?: string | { _seconds: number; _nanoseconds: number }): Date | null {
   if (!input) return null;
-  if (typeof input === "string") return new Date(input);
-  if ("_seconds" in input) return new Date(input._seconds * 1000);
+  if (typeof input === 'string') return new Date(input);
+  if ('_seconds' in input) return new Date(input._seconds * 1000);
   return null;
 }
 
 export default function FormElementsPage() {
   const [activeTab, setActiveTab] = useState('Log');
   const [logEntries, setLogEntries] = useState<LogEntry[]>([{ ...initialLogEntry }]);
-  const [authModal, setAuthModal] = useState<{
-    type: string;
-    index: number;
-    onSuccess: (authData: { authId: string; authName: string; password: string }) => void;
-  } | null>(null);
-  const [checkedItems, setCheckedItems] = useState<{ [key: string]: boolean }>({});
+  const [authModal, setAuthModal] = useState<AuthModalState | null>(null);
+  const [checkedItems, setCheckedItems] = useState<{ [key: string]: boolean }>({
+    TRANSIT: false,
+    DAILY: false,
+    ETOPS: false,
+    Letter: false,
+    PDI: false,
+  });
   const [authDetails, setAuthDetails] = useState<{ [key: string]: AuthDetails }>({});
   const [isFetchingPageNo, setIsFetchingPageNo] = useState(true);
   const [isFetchingLogItems, setIsFetchingLogItems] = useState(false);
@@ -100,8 +95,6 @@ export default function FormElementsPage() {
   const [authData, setAuthData] = useState<AuthData>({
     authId: '',
     authName: '',
-    password: '',
-    sign: '',
     date: '',
     expDate: '',
   });
@@ -121,7 +114,7 @@ export default function FormElementsPage() {
         const airportsData = await airportsRes.json();
         setAirports(Array.isArray(airportsData) ? airportsData : []);
       } catch (err) {
-        console.error("Failed to fetch airports:", err);
+        console.error('Failed to fetch airports:', err);
         setAirports([]);
       }
     }
@@ -145,20 +138,19 @@ export default function FormElementsPage() {
           return acc;
         }, {});
         setAuthDetails(checks);
-        setCheckedItems(
-          Object.keys(checks).reduce((acc: { [key: string]: boolean }, key) => {
-            acc[key] = true;
-            return acc;
-          }, {})
-        );
+        // Sync checkedItems with fetched authDetails
+        setCheckedItems((prev) => ({
+          ...prev,
+          ...Object.keys(checks).reduce((acc, key) => ({ ...acc, [key]: true }), {}),
+        }));
       } else {
         setAuthDetails({});
-        setCheckedItems({});
+        setCheckedItems({ TRANSIT: false, DAILY: false, ETOPS: false, Letter: false, PDI: false });
       }
     } catch (err) {
-      console.error("Failed to fetch checks:", err);
+      console.error('Failed to fetch checks:', err);
       setAuthDetails({});
-      setCheckedItems({});
+      setCheckedItems({ TRANSIT: false, DAILY: false, ETOPS: false, Letter: false, PDI: false });
     }
   };
 
@@ -213,7 +205,6 @@ export default function FormElementsPage() {
 
       setLogs(logsWithFlightDetails);
 
-      // Handle case when logsWithFlightDetails is empty
       if (logsWithFlightDetails.length === 0) {
         setLogPageNo('');
         setSelectedLogIndex(0);
@@ -221,7 +212,6 @@ export default function FormElementsPage() {
         return;
       }
 
-      // Find the log with currentFlight: true, or fall back to the latest log
       let selectedLog = logsWithFlightDetails.find((log) => log.flightDetails?.currentFlight === true);
       let selectedIndex = logsWithFlightDetails.findIndex((log) => log.flightDetails?.currentFlight === true);
 
@@ -235,7 +225,7 @@ export default function FormElementsPage() {
       await fetchLogItems(selectedLog.id);
       await fetchChecks(selectedLog.id);
     } catch (err) {
-      console.error("Failed to fetch logs:", err);
+      console.error('Failed to fetch logs:', err);
       setLogs([]);
       setLogPageNo('');
       setSelectedLogIndex(0);
@@ -275,7 +265,7 @@ export default function FormElementsPage() {
             ddType: item.ddType || '',
             ddNo: item.ddNo || '',
             melCdlRef: item.melCdlRef || '',
-            cat: item.cat || '',
+            cat: item.cat ? `Cat ${item.cat}` : 'Cat A',
             indInspChecked: item.indInspChecked || false,
             componentRows: item.components?.map((comp: any) => ({
               partNo: comp.partNo || '',
@@ -284,10 +274,10 @@ export default function FormElementsPage() {
               serialOff: comp.serialOff || '',
               grn: comp.grn || '',
             })) || [{ partNo: '', serialOn: '', partOff: '', serialOff: '', grn: '' }],
-            shortSignAuthId: '',
-            shortSignAuthName: '',
-            actionAuthId: '',
-            actionAuthName: '',
+            shortSignAuthId: item.shortSignAuthId || '',
+            shortSignAuthName: item.shortSignAuthName || '',
+            actionAuthId: item.actionAuthId || '',
+            actionAuthName: item.actionAuthName || '',
             attemptedAuth: false,
             raisedByValid: false,
             date: '',
@@ -301,7 +291,7 @@ export default function FormElementsPage() {
       setLogEntries(mappedLogEntries);
       setDescriptionErrors(new Array(mappedLogEntries.length).fill(''));
     } catch (err) {
-      console.error("Failed to fetch log items:", err);
+      console.error('Failed to fetch log items:', err);
       setLogEntries([{ ...initialLogEntry, id: 1, displayNumber: 1 }]);
       setDescriptionErrors(['']);
     } finally {
@@ -340,55 +330,13 @@ export default function FormElementsPage() {
     setDescriptionErrors([...descriptionErrors, '']);
   };
 
-  const saveAuthorization = () => {
-    if (!authModal) return;
-
-    const index = authModal.index;
-    const entry = logEntries[index];
-
-    if ((authModal.type === 'Short Sign Auth' || authModal.type === 'Action Auth') && (!entry.actionDetails || entry.actionDetails.trim() === '')) {
-      const updatedErrors = [...descriptionErrors];
-      updatedErrors[index] = 'Action Detail is required';
-      setDescriptionErrors(updatedErrors);
-      return;
-    }
-
-    const updated = [...logEntries];
-    if (authModal.type === 'Short Sign Auth') {
-      updated[authModal.index].shortSignAuthId = authData.authId;
-      updated[authModal.index].shortSignAuthName = authData.authName;
-    } else if (authModal.type === 'Action Auth') {
-      updated[authModal.index].actionAuthId = authData.authId;
-      updated[authModal.index].actionAuthName = authData.authName;
-    }
-
-    setLogEntries(updated);
-
-    setAuthDetails((prev) => ({
-      ...prev,
-      [authModal.type]: {
-        authId: authData.authId,
-        authName: authData.authName,
-        authDate: new Date().toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-        }),
-        svcOption: authModal.type === 'Letter' ? authDetails['Letter']?.svcOption || '' : '',
-      },
-    }));
-
-    setCheckedItems((prev) => ({
-      ...prev,
-      [authModal.type]: true,
-    }));
-
-    setAuthModal(null);
-    setAuthData({ authId: '', authName: '', password: '', sign: '', date: '', expDate: '' });
-  };
-
-  const openAuthModal = (type: string, index: number) => {
-    const today = new Date().toISOString().split("T")[0];
+  // Updated openAuthModal function
+  const openAuthModal = (
+    type: string,
+    index: number,
+    onSuccess: (authData: { authId: string; authName: string }) => void
+  ) => {
+    const today = new Date().toISOString().split('T')[0];
     const entry = logEntries[index];
     const description = entry?.actionDetails;
 
@@ -396,18 +344,17 @@ export default function FormElementsPage() {
       const updatedErrors = [...descriptionErrors];
       updatedErrors[index] = 'Action Detail is required';
       setDescriptionErrors(updatedErrors);
+      setShowError(true);
       return;
     }
 
     setAuthModal({
       type,
       index,
-      onSuccess: (authData: { authId: string; authName: string; password: string }) => {
-        saveAuthorization();
-      },
+      onSuccess,
     });
     setAuthData((prev) => ({ ...prev, date: today }));
-    setCheckedItems((prev) => ({ ...prev, [type]: true }));
+    // Removed premature setCheckedItems here; let onSuccess handle it
   };
 
   const tabs = [
@@ -449,6 +396,7 @@ export default function FormElementsPage() {
           authDetails={authDetails}
           setAuthDetails={setAuthDetails}
           currentLogId={logs[selectedLogIndex]?.id || ''}
+          flightLeg={logs[selectedLogIndex]?.flightLeg || 0}
           onChecksSaved={refetchLogsAndFlights}
         />
       ),
@@ -460,7 +408,6 @@ export default function FormElementsPage() {
   };
 
   const handleSelectLog = (index: number) => {
-    console.log("selected hit");
     setSelectedLogIndex(index);
     setLogPageNo(logs[index].logPageNo);
     fetchLogItems(logs[index].id);
@@ -596,17 +543,17 @@ export default function FormElementsPage() {
                 </div>
               </div>
             </header>
+            <div>{activeContent}</div>
+            <AuthModal
+              authModal={authModal}
+              authData={authData}
+              setAuthData={setAuthData}
+              setAuthModal={setAuthModal}
+              setCheckedItems={setCheckedItems}
+            />
           </div>
         </div>
       </div>
-      <div>{activeContent}</div>
-      <AuthModal
-        authModal={authModal}
-        authData={authData}
-        setAuthData={setAuthData}
-        setAuthModal={setAuthModal}
-        setCheckedItems={setCheckedItems}
-      />
       {showLogListModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-5 w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-lg border-t-4 border-yellow-500">

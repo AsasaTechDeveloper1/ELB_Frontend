@@ -45,8 +45,6 @@ export interface ComponentRow {
 export interface AuthData {
   authId: string;
   authName: string;
-  password: string;
-  sign: string;
   date: string;
   expDate: string;
 }
@@ -56,4 +54,10 @@ export interface AuthDetails {
   authId: string;
   authName: string;
   authDate: string;
+}
+
+export interface AuthModalState {
+  type: string;
+  index: number;
+  onSuccess: (authData: { authId: string; authName: string }) => void;
 }

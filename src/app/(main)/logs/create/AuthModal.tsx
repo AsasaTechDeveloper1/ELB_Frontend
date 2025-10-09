@@ -1,15 +1,13 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
-import SignaturePad from 'react-signature-canvas';
-import type { SignatureCanvas } from 'react-signature-canvas';
-import { AuthData } from '../types';
+import { useEffect } from 'react';
+import { AuthData, AuthModalState } from '../types';
 
 interface AuthModalProps {
-  authModal: { type: string; index: number; onSuccess: (authData: { authId: string; authName: string; password: string }) => void } | null;
+  authModal: AuthModalState | null;
   authData: AuthData;
   setAuthData: React.Dispatch<React.SetStateAction<AuthData>>;
-  setAuthModal: React.Dispatch<React.SetStateAction<{ type: string; index: number; onSuccess: (authData: { authId: string; authName: string; password: string }) => void } | null>>;
+  setAuthModal: React.Dispatch<React.SetStateAction<AuthModalState | null>>;
   setCheckedItems: React.Dispatch<React.SetStateAction<{ [key: string]: boolean }>>;
 }
 
@@ -20,19 +18,16 @@ export default function AuthModal({
   setAuthModal,
   setCheckedItems,
 }: AuthModalProps) {
-  const sigCanvas = useRef<SignatureCanvas | null>(null);
-
   // Log authModal and authData for debugging
   useEffect(() => {
     console.log('AuthModal opened with props:', authModal);
     console.log('Current authData:', authData);
   }, [authModal, authData]);
 
-  // Clear signature canvas when modal opens
+  // Reset authData when modal opens
   useEffect(() => {
     if (authModal) {
-      sigCanvas.current?.clear();
-      setAuthData({ authId: '', authName: '', password: '', sign: '', date: '', expDate: '' });
+      setAuthData({ authId: '', authName: '', date: '', expDate: '' });
     }
   }, [authModal, setAuthData]);
 
@@ -43,17 +38,17 @@ export default function AuthModal({
     console.log('handleAuthorize called with authData:', {
       authId: authData.authId,
       authName: authData.authName,
-      password: authData.password,
-      sign: authData.sign ? 'Signature present' : 'Signature missing',
-      date: authData.date,
-      expDate: authData.expDate,
     });
 
-    // Bypassing validation for testing
+    // Validate inputs
+    if (!authData.authId || !authData.authName) {
+      alert('Please fill in all fields.');
+      return;
+    }
+
     const authDataToSend = {
-      authId: authData.authId || 'test-id',
-      authName: authData.authName || 'Test Name',
-      password: authData.password || 'test-password',
+      authId: authData.authId,
+      authName: authData.authName,
     };
 
     console.log('Calling onSuccess with:', authDataToSend);
@@ -66,10 +61,9 @@ export default function AuthModal({
       alert('Error: onSuccess callback not defined');
     }
 
-    // Reset modal and state
-    setCheckedItems((prev) => ({ ...prev, [authModal.type]: false }));
+    // Close modal and reset authData
     setAuthModal(null);
-    setAuthData({ authId: '', authName: '', password: '', sign: '', date: '', expDate: '' });
+    setAuthData({ authId: '', authName: '', date: '', expDate: '' });
   };
 
   return (
@@ -118,66 +112,22 @@ export default function AuthModal({
               placeholder="Enter Staff Name"
             />
           </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1 mt-2">Password</label>
-          <input
-            type="password"
-            name="authPass"
-            autoComplete="new-password"
-            value={authData.password}
-            onChange={(e) => {
-              console.log('password changed:', e.target.value);
-              setAuthData({ ...authData, password: e.target.value });
-            }}
-            className="w-full border rounded px-3 py-2 text-sm"
-            placeholder="Enter Password"
-          />
-        </div>
-        <div className="mt-4">
-          <div className="flex justify-between items-center mb-1">
-            <label className="block text-sm font-medium text-gray-700 flex items-center gap-2">
-              Sign
-              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16 4l-1.41 1.41M4 20h16M4 20L19 5a2.828 2.828 0 114 4L8 20H4z" />
-              </svg>
-            </label>
-            <button
-              onClick={() => {
-                sigCanvas.current?.clear();
-                setAuthData({ ...authData, sign: '', date: '', expDate: '' });
-              }}
-              className="px-3 py-1 text-sm text-white bg-red-500 hover:bg-red-600 rounded shadow transition"
-            >
-              Clear
-            </button>
-          </div>
-          <div className="w-full border rounded">
-            <SignaturePad
-              ref={sigCanvas}
-              canvasProps={{ className: "w-full h-24 rounded" }}
-              onEnd={() => {
-                if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
-                  const signature = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png');
-                  const currentDate = new Date().toISOString();
-                  const expDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-                  console.log('Signature captured:', signature);
-                  setAuthData((prev) => ({ ...prev, sign: signature, date: currentDate, expDate }));
-                } else {
-                  console.log('Signature canvas is empty');
-                }
-              }}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1 mt-2">Password</label>
+            <input
+              type="password"
+              name="authPass"
+              autoComplete="new-password"
+              className="w-full border rounded px-3 py-2 text-sm"
+              placeholder="Enter Password"
             />
           </div>
         </div>
         <div className="flex justify-end gap-3 mt-6">
           <button
             onClick={() => {
-              if (authModal?.type) {
-                setCheckedItems((prev) => ({ ...prev, [authModal.type]: false }));
-              }
               setAuthModal(null);
-              setAuthData({ authId: '', authName: '', password: '', sign: '', date: '', expDate: '' });
+              setAuthData({ authId: '', authName: '', date: '', expDate: '' });
             }}
             className="px-5 py-2 text-sm font-medium bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition"
           >
