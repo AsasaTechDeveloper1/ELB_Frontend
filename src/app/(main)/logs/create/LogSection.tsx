@@ -427,6 +427,9 @@ export default function LogSection({
                         <div className="flex flex-col flex-1 gap-4">
                           <div className="flex flex-wrap md:flex-nowrap items-center gap-4">
                             <div className="flex flex-row items-center gap-2 w-full sm:w-[350px] max-w-[350px]">
+                              <h1 className="text-xl font-bold text-[#004051] w-[15px]">
+                                {entry.displayNumber || index + 1}.
+                              </h1>
                               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-[320px]">
                                 <label className="text-sm font-medium text-gray-700 w-[60px] min-w-[60px]">CLASS:</label>
                                 <div className="flex flex-col w-full sm:w-[350px] max-w-[350px]">
@@ -826,7 +829,7 @@ export default function LogSection({
                         </button>
                       </div>
                     </div>
-                    <div className="flex justify-end">
+                    {/* <div className="flex justify-end">
                       <button
                         type="button"
                         onClick={() => removeLogEntry(index)}
@@ -834,7 +837,7 @@ export default function LogSection({
                       >
                         Remove Log Entry
                       </button>
-                    </div>
+                    </div>  */}
                   </div>
                 );
               })}
@@ -844,7 +847,7 @@ export default function LogSection({
                   Enter defect and action details accurately. Ensure all fields are completed as per aviation maintenance protocols.
                 </p>
               </div>
-              <div className="flex justify-end">
+              {/* <div className="flex justify-end">
                 <button
                   onClick={addNewLogEntry}
                   type="button"
@@ -852,7 +855,7 @@ export default function LogSection({
                 >
                   + Add New Log Entry
                 </button>
-              </div>
+              </div> */}
             </>
           )}
         </div>
