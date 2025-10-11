@@ -10,6 +10,7 @@ interface Flight {
   fltNo: string;
   takeOffDate: string;
   currentFlight: boolean;
+  flightLeg: number; // Added flightLeg to interface
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -21,15 +22,21 @@ export async function OverviewCardsGroup() {
   // 🔹 Fetch flights
   let previousFlights: Flight[] = [];
   let nextFlights: Flight[] = [];
+  let currentFlight: Flight | null = null;
   try {
     const res = await fetch(`${API_BASE}/flights`, { cache: "no-store" });
     if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
 
     const flights: Flight[] = await res.json();
-    const today = new Date("2025-09-27");
 
-    previousFlights = flights.filter(flight => new Date(flight.takeOffDate) < today);
-    nextFlights = flights.filter(flight => new Date(flight.takeOffDate) >= today);
+    // Filter and sort flights based on flightLeg
+    previousFlights = flights
+      .filter(flight => flight.flightLeg < 0)
+      .sort((a, b) => b.flightLeg - a.flightLeg); // Most recent first (higher negative number)
+    nextFlights = flights
+      .filter(flight => flight.flightLeg > 0)
+      .sort((a, b) => a.flightLeg - b.flightLeg); // Nearest first (lower positive number)
+    currentFlight = flights.find(flight => flight.flightLeg === 0) || null;
   } catch (err) {
     console.error("Failed to fetch flights:", err);
   }
@@ -122,8 +129,8 @@ export async function OverviewCardsGroup() {
                 <thead className="bg-gray-50 text-gray-600 uppercase">
                   <tr>
                     <th className="px-4 py-2 border-b">Flight No</th>
-                    <th className="px-4 py-2 border-b">Time</th>
-                    <th className="px-4 py-2 border-b">Status</th>
+                    <th className="px-4 py-2 border-b">Date</th>
+                    <th className="px-4 py-2 border-b">Flight Leg</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -132,13 +139,7 @@ export async function OverviewCardsGroup() {
                       <tr key={flight.id}>
                         <td className="px-4 py-2 border-b">{flight.fltNo}</td>
                         <td className="px-4 py-2 border-b">{flight.takeOffDate}</td>
-                        <td className="px-4 py-2 border-b">
-                          {flight.currentFlight && (
-                            <span className="px-3 py-1 text-sm text-[#06b6d4] font-semibold bg-[#06b6d4]/10 border border-[#06b6d4] rounded-full">
-                              Current Flight
-                            </span>
-                          )}
-                        </td>
+                        <td className="px-4 py-2 border-b">{flight.flightLeg}</td>
                       </tr>
                     ))
                   ) : (
@@ -161,8 +162,8 @@ export async function OverviewCardsGroup() {
                 <thead className="bg-gray-50 text-gray-600 uppercase">
                   <tr>
                     <th className="px-4 py-2 border-b">Flight No</th>
-                    <th className="px-4 py-2 border-b">Time</th>
-                    <th className="px-4 py-2 border-b">Status</th>
+                    <th className="px-4 py-2 border-b">Date</th>
+                    <th className="px-4 py-2 border-b">Flight Leg</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -171,13 +172,7 @@ export async function OverviewCardsGroup() {
                       <tr key={flight.id}>
                         <td className="px-4 py-2 border-b">{flight.fltNo}</td>
                         <td className="px-4 py-2 border-b">{flight.takeOffDate}</td>
-                        <td className="px-4 py-2 border-b">
-                          {flight.currentFlight && (
-                            <span className="px-3 py-1 text-sm text-[#06b6d4] font-semibold bg-[#06b6d4]/10 border border-[#06b6d4] rounded-full">
-                              Current Flight
-                            </span>
-                          )}
-                        </td>
+                        <td className="px-4 py-2 border-b">{flight.flightLeg}</td>
                       </tr>
                     ))
                   ) : (

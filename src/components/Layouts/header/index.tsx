@@ -9,9 +9,67 @@ import { Notification } from "./notification";
 import { HomeButton } from "./home";
 import { ThemeToggleSwitch } from "./theme-toggle";
 import { UserInfo } from "./user-info";
+import { useEffect, useState } from "react";
+
+interface Flight {
+  id: string;
+  fltNo: string;
+  takeOffDate: string;
+  currentFlight: boolean;
+  flightLeg: number;
+  regn: string; // Aircraft registration (e.g., A6EQN)
+  typeOfFlight: string; // Aircraft type (e.g., B773ER)
+  from: string; // Departure airport (e.g., DMM)
+  to: string; // Arrival airport (e.g., DXB)
+  totalHrs: string; // Flight hours (e.g., 28865:56)
+  landings: number; // Flight cycles (e.g., 4656)
+  offBlock: string; // Departure time (e.g., 01:15)
+  onBlock: string; // Arrival time (e.g., 02:17)
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 export function Header() {
   const { toggleSidebar, isMobile } = useSidebarContext();
+  const [currentFlight, setCurrentFlight] = useState<Flight | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch current flight (flightLeg === 0)
+  useEffect(() => {
+    const fetchCurrentFlight = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/flights`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
+        const flights: Flight[] = await res.json();
+        const flight = flights.find(flight => flight.flightLeg === 0) || null;
+        setCurrentFlight(flight);
+      } catch (err) {
+        console.error("Failed to fetch current flight:", err);
+        setCurrentFlight(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCurrentFlight();
+  }, []);
+
+  // Default placeholder data for when no current flight is found
+  const defaultFlightData = {
+    regn: "A6EQN",
+    typeOfFlight: "B773ER",
+    totalHrs: "28865:56",
+    landings: 4656,
+    fltNo: "EK0824",
+    from: "DMM",
+    to: "DXB",
+    offBlock: "01:15",
+    onBlock: "02:17",
+    takeOffDate: "7 Mar 25",
+  };
+
+  // Format flight data for display
+  const flightData = currentFlight || defaultFlightData;
 
   return (
     <header className="sticky top-0 z-30 border-b border-stroke bg-white px-4 py-5 shadow-1 dark:border-stroke-dark dark:bg-gray-dark md:px-5 2xl:px-4">
@@ -24,8 +82,6 @@ export function Header() {
           <MenuIcon />
           <span className="sr-only">Toggle Sidebar</span>
         </button>
-
-        
 
         {/* Logo (only mobile) */}
         {isMobile && (
@@ -41,13 +97,12 @@ export function Header() {
         )}
 
         <HomeButton />
-        
+
         {/* Right side - notification & profile */}
         <div className="flex flex-1 items-center justify-end gap-2 min-[375px]:gap-4">
           {/* Desktop flight info */}
-          
           <div className="hidden md:block w-full bg-[#004051] shadow-md border border-gray-200 rounded-lg">
-            <div 
+            <div
               className="grid max-w-[970px] mx-auto py-3"
               style={{ gridTemplateColumns: "1fr 1fr 2fr" }}
             >
@@ -57,7 +112,7 @@ export function Header() {
                   Aircraft / Type
                 </span>
                 <span className="text-sm font-semibold text-white">
-                  A6EQN / B773ER
+                  {flightData.regn} / {flightData.typeOfFlight}
                 </span>
               </div>
 
@@ -67,7 +122,7 @@ export function Header() {
                   Flight Hours / Cycles
                 </span>
                 <span className="text-sm font-semibold text-white">
-                  FH-28865:56 / FC-4656
+                  FH-{flightData.totalHrs} / FC-{flightData.landings}
                 </span>
               </div>
 
@@ -77,10 +132,11 @@ export function Header() {
                   <span className="text-xs text-gray-300 uppercase">
                     Flight :
                   </span>{" "}
-                  EK0824
+                  {flightData.fltNo}
                   <br />
                   <span className="text-xs font-normal text-gray-200">
-                    DMM (ETD 01:15, 7 Mar 25) → DXB (ETA 02:17, 7 Mar 25)
+                    {flightData.from} (ETD {flightData.offBlock}, {flightData.takeOffDate}) →{" "}
+                    {flightData.to} (ETA {flightData.onBlock}, {flightData.takeOffDate})
                   </span>
                 </span>
               </div>
@@ -98,30 +154,32 @@ export function Header() {
       {/* Mobile flight info (compact row) */}
       <div className="block md:hidden w-full mt-3">
         <div className="bg-[#004051] shadow-md border border-gray-200 rounded-md p-2 flex items-center justify-between text-center text-white text-[10px]">
-          
           {/* Aircraft / Type */}
           <div className="flex flex-col items-center px-1">
             <span className="uppercase text-gray-300">Aircraft / Type</span>
-            <span className="text-xs font-semibold">A6EQN / B773ER</span>
+            <span className="text-xs font-semibold">
+              {flightData.regn} / {flightData.typeOfFlight}
+            </span>
           </div>
 
           {/* Flight Hours / Cycles */}
           <div className="flex flex-col items-center px-1">
             <span className="uppercase text-gray-300">FH / FC</span>
-            <span className="text-xs font-semibold">28865:56 / 4656</span>
+            <span className="text-xs font-semibold">
+              {flightData.totalHrs} / {flightData.landings}
+            </span>
           </div>
 
           {/* Flight & Route */}
           <div className="flex flex-col items-center px-1">
             <span className="uppercase text-gray-300">Flight</span>
-            <span className="text-xs font-semibold">EK0824</span>
+            <span className="text-xs font-semibold">{flightData.fltNo}</span>
             <span className="text-[10px] text-gray-200 leading-tight">
-              DMM (01:15) → DXB (02:17)
+              {flightData.from} ({flightData.offBlock}) → {flightData.to} ({flightData.onBlock})
             </span>
           </div>
         </div>
       </div>
-
     </header>
   );
 }
