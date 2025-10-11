@@ -188,6 +188,7 @@ export default function LogSection({
   const [fetchingDdIndices, setFetchingDdIndices] = useState<number[]>([]);
   const [deferrals, setDeferrals] = useState<any[]>([]);
   const [deferralErrors, setDeferralErrors] = useState<string[]>([]);
+  const [isAuthorizing, setIsAuthorizing] = useState<{ index: number; type: string } | null>(null);
   const prevLogEntries = useRef<LogEntry[]>(logEntries);
 
   // Fetch deferrals on component mount
@@ -340,6 +341,9 @@ export default function LogSection({
       return;
     }
 
+    // Set loading state
+    setIsAuthorizing({ index, type });
+
     // Open auth modal with a callback to save the log item after authorization
     openAuthModal(type, index, async (authData) => {
       console.log(authData, "fetch authData");
@@ -347,44 +351,58 @@ export default function LogSection({
       const updatedEntries = [...logEntries];
       const entry = updatedEntries[index];
 
-      // Update authorization data
-      if (type === 'Short Sign Auth') {
-        updatedEntries[index] = {
-          ...entry,
-          shortSignAuthId: authData.authId,
-          shortSignAuthName: authData.authName,
-        };
-        // Save the log item after Short Sign Auth
-        console.log('Saving log item after Short Sign Auth');
-        const savedItem = await saveLogItem(currentLogId, updatedEntries[index], index);
-        if (savedItem) {
+      try {
+        // Update authorization data
+        if (type === 'Short Sign Auth') {
           updatedEntries[index] = {
-            ...updatedEntries[index],
-            updated_id: savedItem.id || updatedEntries[index].updated_id,
-            displayNumber: savedItem.displayNumber || updatedEntries[index].displayNumber,
-            ddNo: savedItem.ddNo || updatedEntries[index].ddNo,
+            ...entry,
+            shortSignAuthId: authData.authId,
+            shortSignAuthName: authData.authName,
           };
-        }
-      } else if (type === 'Action Auth') {
-        updatedEntries[index] = {
-          ...entry,
-          actionAuthId: authData.authId,
-          actionAuthName: authData.authName,
-        };
-        // Update the log item after Action Auth
-        console.log('Updating log item after Action Auth');
-        const savedItem = await saveLogItem(currentLogId, updatedEntries[index], index);
-        if (savedItem) {
+          // Save the log item after Short Sign Auth
+          console.log('Saving log item after Short Sign Auth');
+          const savedItem = await saveLogItem(currentLogId, updatedEntries[index], index);
+          if (savedItem) {
+            updatedEntries[index] = {
+              ...updatedEntries[index],
+              updated_id: savedItem.id || updatedEntries[index].updated_id,
+              displayNumber: savedItem.displayNumber || updatedEntries[index].displayNumber,
+              ddNo: savedItem.ddNo || updatedEntries[index].ddNo,
+            };
+            alert(`Log item saved successfully with ID: ${savedItem.id}`);
+          } else {
+            alert('Failed to save log item after Short Sign Auth.');
+          }
+        } else if (type === 'Action Auth') {
           updatedEntries[index] = {
-            ...updatedEntries[index],
-            updated_id: savedItem.id || updatedEntries[index].updated_id,
-            displayNumber: savedItem.displayNumber || updatedEntries[index].displayNumber,
-            ddNo: savedItem.ddNo || updatedEntries[index].ddNo,
+            ...entry,
+            actionAuthId: authData.authId,
+            actionAuthName: authData.authName,
           };
+          // Update the log item after Action Auth
+          console.log('Updating log item after Action Auth');
+          const savedItem = await saveLogItem(currentLogId, updatedEntries[index], index);
+          if (savedItem) {
+            updatedEntries[index] = {
+              ...updatedEntries[index],
+              updated_id: savedItem.id || updatedEntries[index].updated_id,
+              displayNumber: savedItem.displayNumber || updatedEntries[index].displayNumber,
+              ddNo: savedItem.ddNo || updatedEntries[index].ddNo,
+            };
+            alert(`Log item updated successfully with ID: ${savedItem.id}`);
+          } else {
+            alert('Failed to update log item after Action Auth.');
+          }
         }
+        console.log(updatedEntries, "updatedEntries");
+        setLogEntries(updatedEntries);
+      } catch (error) {
+        console.error('❌ Error during authorization save:', error);
+        alert('An error occurred while saving the log item.');
+      } finally {
+        // Clear loading state
+        setIsAuthorizing(null);
       }
-      console.log(updatedEntries, "updatedEntries");
-      setLogEntries(updatedEntries);
     });
   };
 
@@ -581,19 +599,59 @@ export default function LogSection({
                           {!entry.shortSignAuthId && (
                             <button
                               type="button"
-                              className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${isFullyAuthorized ? 'opacity-50 cursor-not-allowed' : ''} min-w-[120px]`}
+                              className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${isFullyAuthorized || (isAuthorizing?.index === index && isAuthorizing?.type === 'Short Sign Auth') ? 'opacity-50 cursor-not-allowed' : ''} min-w-[120px] flex items-center justify-center`}
                               onClick={() => handleAuthClick('Short Sign Auth', index)}
+                              disabled={isAuthorizing?.index === index && isAuthorizing?.type === 'Short Sign Auth'}
                             >
-                              Short Sign
+                              {isAuthorizing?.index === index && isAuthorizing?.type === 'Short Sign Auth' ? (
+                                <>
+                                  <svg
+                                    className="animate-spin h-5 w-5 mr-2 text-white"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path
+                                      className="opacity-75"
+                                      fill="currentColor"
+                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    ></path>
+                                  </svg>
+                                  Authorizing...
+                                </>
+                              ) : (
+                                'Short Sign'
+                              )}
                             </button>
                           )}
                           {!entry.actionAuthId && (
                             <button
                               type="button"
-                              className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm min-w-[120px]`}
+                              className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm min-w-[120px] flex items-center justify-center`}
                               onClick={() => handleAuthClick('Action Auth', index)}
+                              disabled={isAuthorizing?.index === index && isAuthorizing?.type === 'Action Auth'}
                             >
-                              Auth
+                              {isAuthorizing?.index === index && isAuthorizing?.type === 'Action Auth' ? (
+                                <>
+                                  <svg
+                                    className="animate-spin h-5 w-5 mr-2 text-white"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path
+                                      className="opacity-75"
+                                      fill="currentColor"
+                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    ></path>
+                                  </svg>
+                                  Authorizing...
+                                </>
+                              ) : (
+                                'Auth'
+                              )}
                             </button>
                           )}
                           {entry.actionAuthId && (

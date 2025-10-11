@@ -5,12 +5,6 @@ import Image from 'next/image';
 import SignaturePad from 'react-signature-canvas';
 import type { SignatureCanvas } from 'react-signature-canvas';
 
-// Define interfaces
-interface HistoryItem {
-  raised: string;
-  worked: string;
-}
-
 interface DeferralEntry {
   id?: string;
   groupNo: number;
@@ -40,7 +34,6 @@ interface DeferralEntry {
   clearedAuth: string;
   clearedAuthName: string;
   clearedDate: string;
-  history: HistoryItem[];
 }
 
 interface LogItem {
@@ -66,7 +59,7 @@ interface Log {
   id: string;
   logPageNo: string;
   items: LogItem[];
-  flightLeg: number; // Added flightLeg to the interface
+  flightLeg: number;
 }
 
 const initialEntry: DeferralEntry = {
@@ -97,7 +90,6 @@ const initialEntry: DeferralEntry = {
   clearedAuth: '',
   clearedAuthName: '',
   clearedDate: '',
-  history: [],
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -159,12 +151,24 @@ const normalizeMelCat = (cat: string): string => {
   return cat || '';
 };
 
+// Format date for history display
+const formatDate = (createdAt: any): string => {
+  if (!createdAt) return 'Date unavailable';
+  if (typeof createdAt === 'string') {
+    const date = new Date(createdAt);
+    return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
+  }
+  if (createdAt.seconds) {
+    return new Date(createdAt.seconds * 1000).toLocaleString();
+  }
+  return 'Invalid date format';
+};
+
 export default function DeferralsForm() {
   const sigCanvas = useRef<SignatureCanvas | null>(null);
   const [entries, setEntries] = useState<DeferralEntry[]>([]);
+  const [histories, setHistories] = useState<{ [deferralId: string]: any[] }>({});
   const [authModal, setAuthModal] = useState<{ type: 'entered' | 'cleared'; index: number } | null>(null);
-  const [historyModal, setHistoryModal] = useState<{ index: number } | null>(null);
-  const [tempHistory, setTempHistory] = useState<HistoryItem[]>([]);
   const [authData, setAuthData] = useState<{
     authId: string;
     authName: string;
@@ -188,6 +192,7 @@ export default function DeferralsForm() {
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<Log[]>([]);
   const [nextTypeNo, setNextTypeNo] = useState<string>('DEF-00001');
+  const [isHistoryOpen, setIsHistoryOpen] = useState<{ [index: number]: boolean }>({});
 
   // Generate the next Type/No based on existing type_no values
   const generateNextTypeNo = (existingTypeNos: string[]): string => {
@@ -211,6 +216,11 @@ export default function DeferralsForm() {
       ...prev,
       [index]: { ...prev[index], [action]: state },
     }));
+  };
+
+  // Toggle history visibility
+  const toggleHistory = (index: number) => {
+    setIsHistoryOpen((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
   // Fetch deferrals from the backend
@@ -256,7 +266,6 @@ export default function DeferralsForm() {
             clearedAuth: item.entries[0].clearedAuth || '',
             clearedAuthName: item.entries[0].clearedAuthName || '',
             clearedDate: item.entries[0].clearedDate || '',
-            history: item.entries[0].history || [],
           }));
         setEntries(fetchedEntries);
         setDescriptionErrors(fetchedEntries.map(() => ''));
@@ -306,6 +315,31 @@ export default function DeferralsForm() {
     }
   };
 
+  // Fetch deferral history for each entry
+  useEffect(() => {
+    const fetchHistories = async () => {
+      for (const entry of entries) {
+        if (entry.id && !histories[entry.id]) {
+          console.log(`Fetching history for deferralId: ${entry.defect_reference.type_no}`);
+          try {
+            const res = await fetch(`${API_BASE}/deferrals/history/${entry.defect_reference.type_no}`);
+            if (!res.ok) {
+              const errorText = await res.text();
+              console.error(`Failed to fetch history for ${entry.id}: ${res.status} ${errorText}`);
+              continue;
+            }
+            const data = await res.json();
+            console.log(`History for ${entry.id}:`, data);
+            setHistories((prev) => ({ ...prev, [entry.id!]: data }));
+          } catch (err) {
+            console.error(`Error fetching history for ${entry.id}:`, err);
+          }
+        }
+      }
+    };
+    fetchHistories();
+  }, [entries, histories]);
+
   // Fetch deferrals and logs when the component mounts
   useEffect(() => {
     fetchDeferrals();
@@ -353,9 +387,9 @@ export default function DeferralsForm() {
       const newGroupNo = entries.length + 1;
       const lastTypeNo = await fetchLatestTypeNo();
       const newTypeNo = entries.length === 0 && lastTypeNo === 'DEF-00000' ? 'DEF-00001' : incrementTypeNo(lastTypeNo);
-      const targetLog = logs.find((log) => log.flightLeg === 0); // Find log with flightLeg 0
-      const nextDisplayNumber = (targetLog?.items ?? []).length > 0 
-        ? Math.max(...(targetLog?.items ?? []).map((item) => item.displayNumber)) + 1 
+      const targetLog = logs.find((log) => log.flightLeg === 0);
+      const nextDisplayNumber = (targetLog?.items ?? []).length > 0
+        ? Math.max(...(targetLog?.items ?? []).map((item) => item.displayNumber)) + 1
         : 1;
       const nextLogItemId = targetLog?.items.find((item) => item.displayNumber === nextDisplayNumber)?.id || null;
 
@@ -394,7 +428,7 @@ export default function DeferralsForm() {
           return;
         }
       }
-
+      
       const updatedEntries = [...entries];
       updatedEntries.splice(index, 1);
       setEntries(updatedEntries);
@@ -424,7 +458,6 @@ export default function DeferralsForm() {
         return;
       }
 
-      // Find the log with flightLeg 0
       const targetLog = logs.find((log) => log.flightLeg === 0);
       if (!targetLog) {
         setError('No log with flight leg 0 found.');
@@ -438,7 +471,6 @@ export default function DeferralsForm() {
         ? Math.max(...targetLog.items.map((item) => item.displayNumber)) + 1
         : 1;
 
-      // Create a new log item based on the deferral entry
       const newLogItem: Partial<LogItem> = {
         displayNumber: nextDisplayNumber,
         defectDetails: entry.description,
@@ -457,13 +489,12 @@ export default function DeferralsForm() {
         components: [],
       };
 
-      // Save the new log item to the log with flightLeg 0
       const response = await fetch(`${API_BASE}/logs/${targetLog.id}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           logItem: newLogItem,
-          createdBy: 'system', // Replace with actual user ID if available
+          createdBy: 'system',
         }),
       });
 
@@ -472,7 +503,6 @@ export default function DeferralsForm() {
         throw new Error(data.error || 'Failed to create log item');
       }
 
-      // Refresh logs to reflect the new item
       await fetchLogs();
 
       alert('Log item created successfully in flight leg 0! ✅');
@@ -529,11 +559,10 @@ export default function DeferralsForm() {
               clearedAuthName: authData.authName,
               clearedDate: authData.date,
               clear_reference: { ...entry.clear_reference, date: authData.date, staff_id: authData.authId },
-              defect_reference: { ...entry.defect_reference, dd_action: 'Cleared (C)' }, // Update dd_action to Cleared
+              defect_reference: { ...entry.defect_reference, dd_action: 'Cleared (C)' },
             }),
       };
 
-      // Save to backend immediately
       const payload = {
         entries: [{
           defect_reference: updatedEntry.defect_reference,
@@ -549,7 +578,6 @@ export default function DeferralsForm() {
           clearedAuthName: updatedEntry.clearedAuthName,
           clearedDate: updatedEntry.clearedDate,
           deferral: true,
-          history: updatedEntry.history,
         }],
       };
 
@@ -564,7 +592,6 @@ export default function DeferralsForm() {
         throw new Error(data.error || 'Failed to save authorization');
       }
 
-      // Update local state
       setEntries((prevEntries) =>
         prevEntries.map((e, i) => (i === index ? { ...updatedEntry, id: data.results[0].id } : e))
       );
@@ -577,97 +604,11 @@ export default function DeferralsForm() {
 
       setAuthModal(null);
       setAuthData({ authId: '', authName: '', password: '', sign: '', date: '', expDate: '' });
-      await fetchDeferrals(); // Fetch updated deferrals
+      await fetchDeferrals();
     } catch (err: any) {
       setError('Error saving authorization: ' + err.message);
     } finally {
       setActionLoadingState(index, 'auth', false);
-    }
-  };
-
-  const openHistoryModal = (index: number) => {
-    setHistoryModal({ index });
-    setTempHistory(entries[index].history || []);
-  };
-
-  const addNewHistoryItem = () => {
-    setTempHistory([...tempHistory, { raised: '', worked: '' }]);
-  };
-
-  const updateHistoryItem = (histIndex: number, field: 'raised' | 'worked', value: string) => {
-    const updated = [...tempHistory];
-    updated[histIndex][field] = value;
-    setTempHistory(updated);
-  };
-
-  const removeHistoryItem = (histIndex: number) => {
-    const updated = [...tempHistory];
-    updated.splice(histIndex, 1);
-    setTempHistory(updated);
-  };
-
-  const saveHistory = async () => {
-    if (!historyModal) return;
-    const index = historyModal.index;
-    const entry = entries[index];
-
-    setActionLoadingState(index, 'history', true);
-    try {
-      const updatedEntry = { ...entry, history: tempHistory };
-
-      // Save to backend
-      const payload = {
-        entries: [{
-          defect_reference: updatedEntry.defect_reference,
-          description: updatedEntry.description,
-          clear_reference: updatedEntry.clear_reference,
-          enteredSign: updatedEntry.enteredSign,
-          enteredAuth: updatedEntry.enteredAuth,
-          enteredAuthName: updatedEntry.enteredAuthName,
-          enteredDate: updatedEntry.enteredDate,
-          expDate: updatedEntry.expDate,
-          clearedSign: updatedEntry.clearedSign,
-          clearedAuth: updatedEntry.clearedAuth,
-          clearedAuthName: updatedEntry.clearedAuthName,
-          clearedDate: updatedEntry.clearedDate,
-          deferral: true,
-          history: updatedEntry.history,
-        }],
-      };
-
-      const res = await fetch(`${API_BASE}/deferrals${entry.id ? `/${entry.id}` : ''}`, {
-        method: entry.id ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to save history');
-      }
-
-      // Extract the deferral ID from the response
-      let deferralId;
-      if (entry.id) {
-        deferralId = data.id;
-      } else {
-        deferralId = data.results?.[0]?.id;
-      }
-
-      if (!deferralId) {
-        throw new Error('Failed to retrieve deferral ID from response');
-      }
-
-      // Update local state
-      setEntries((prev) =>
-        prev.map((e, i) => (i === index ? { ...updatedEntry, id: deferralId } : e))
-      );
-      setHistoryModal(null);
-      await fetchDeferrals(); // Fetch updated deferrals
-    } catch (err: any) {
-      setError('Error saving history: ' + err.message);
-    } finally {
-      setActionLoadingState(index, 'history', false);
     }
   };
 
@@ -702,7 +643,6 @@ export default function DeferralsForm() {
             clearedAuthName: entry.clearedAuthName,
             clearedDate: entry.clearedDate,
             deferral: true,
-            history: entry.history,
           }],
         };
 
@@ -826,6 +766,7 @@ export default function DeferralsForm() {
               ) : (
                 entries.map((entry, index) => {
                   const isCleared = entry.defect_reference.dd_action === 'Cleared (C)';
+                  const history = histories[entry.id || ''] || [];
                   return (
                     <tr
                       key={entry.id || `entry-${index}`}
@@ -953,24 +894,57 @@ export default function DeferralsForm() {
                         </div>
                       </td>
                       <td className="p-3 align-top border-t border-gray-300">
-                        <textarea
-                          className={`w-full min-w-[250px] md:min-w-[400px] h-54 border-2 border-[#004051] rounded-md p-2 text-md focus:outline-none focus:ring-2 focus:ring-[#004051]/30 ${
-                            isCleared ? 'bg-gray-100 cursor-not-allowed' : ''
-                          }`}
-                          placeholder="Enter description..."
-                          value={entry.description}
-                          onChange={(e) => handleInputChange(index, 'description', e.target.value)}
-                          disabled={isCleared || authorizedEntries.includes(index) || clearedEntries.includes(index)}
-                        />
-                        {descriptionErrors[index] && (
-                          <p className="text-red-600 text-sm mt-1">{descriptionErrors[index]}</p>
-                        )}
-                        <button
-                          onClick={() => openHistoryModal(index)}
-                          className="mt-2 bg-[#06b6d4] text-white px-4 py-1 text-sm rounded-md font-medium hover:bg-[#005b6b] transition"
-                        >
-                          View History
-                        </button>
+                        <div className="flex flex-col gap-4">
+                          <div>
+                            <textarea
+                              className={`w-full min-w-[250px] md:min-w-[400px] h-32 border-2 border-[#004051] rounded-md p-2 text-md focus:outline-none focus:ring-2 focus:ring-[#004051]/30 ${
+                                isCleared ? 'bg-gray-100 cursor-not-allowed' : ''
+                              }`}
+                              placeholder="Enter description..."
+                              value={entry.description}
+                              onChange={(e) => handleInputChange(index, 'description', e.target.value)}
+                              disabled={isCleared || authorizedEntries.includes(index) || clearedEntries.includes(index)}
+                            />
+                            {descriptionErrors[index] && (
+                              <p className="text-red-600 text-sm mt-1">{descriptionErrors[index]}</p>
+                            )}
+                          </div>
+                          <div className="w-full border-2 border-[#004051] rounded-md p-3 bg-gray-50">
+                            <div className="flex justify-between items-center mb-2">
+                              <h4 className="text-sm font-semibold text-[#004051] sticky top-0 bg-gray-50">
+                                History for {entry.defect_reference.type_no}
+                              </h4>
+                              <button
+                                onClick={() => toggleHistory(index)}
+                                className="text-sm text-[#004051] hover:underline"
+                              >
+                                {isHistoryOpen[index] ? 'Hide' : 'Show'} History
+                              </button>
+                            </div>
+                            {isHistoryOpen[index] && (
+                              <div className="max-h-40 overflow-y-auto">
+                                {history.length === 0 ? (
+                                  <p className="text-sm text-gray-500">No history available.</p>
+                                ) : (
+                                  [...history]
+                                    .sort((a, b) => {
+                                      const dateA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt).getTime();
+                                      const dateB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt).getTime();
+                                      return dateB - dateA;
+                                    })
+                                    .map((h) => (
+                                      <div key={h.id} className="mb-3 border-b pb-2 last:border-b-0">
+                                        <p className="text-sm font-medium text-gray-700">
+                                          <strong>{h.action}</strong> on {formatDate(h.createdAt)} by {h.createdBy || 'Unknown'}
+                                        </p>
+                                        <p className="text-sm text-gray-600 mt-1">Details: {h.description || 'No details'}</p>
+                                      </div>
+                                    ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td className="p-3 align-top border-t border-gray-300">
                         <div>
@@ -1065,29 +1039,30 @@ export default function DeferralsForm() {
                                   <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Copying...
-                              </>
-                            ) : (
-                              'Copy'
-                            )}
-                          </button>
-                          <button
-                            onClick={() => removeEntry(index)}
-                            className="bg-red-600 text-white px-4 py-1 text-sm rounded-md font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2"
-                          >
-                            {actionLoading[index]?.remove ? (
-                              <>
-                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Removing...
-                              </>
-                            ) : (
-                              'Remove'
-                            )}
-                          </button>
+                                  </svg>
+                                  Copying...
+                                </>
+                              ) : (
+                                'Copy'
+                              )}
+                            </button>
+                            <button
+                              onClick={() => removeEntry(index)}
+                              className="bg-red-600 text-white px-4 py-1 text-sm rounded-md font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2"
+                              disabled={actionLoading[index]?.remove}
+                            >
+                              {actionLoading[index]?.remove ? (
+                                <>
+                                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Removing...
+                                </>
+                              ) : (
+                                'Remove'
+                              )}
+                            </button>
                           </div>
                         </div>
                       </td>
@@ -1100,6 +1075,23 @@ export default function DeferralsForm() {
         </div>
 
         <div className="flex justify-center mb-6 mt-4">
+          <button
+            onClick={handleSave}
+            className="bg-[#004051] text-white px-6 py-2 rounded-md font-medium hover:bg-[#006172] transition disabled:opacity-50 flex items-center gap-2"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Saving...
+              </>
+            ) : (
+              'Save All'
+            )}
+          </button>
         </div>
       </div>
 
@@ -1114,7 +1106,7 @@ export default function DeferralsForm() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M4.93 4.93l14.14 14.14M12 2a10 10 0 100 20 10 10 0 000-20z" />
               </svg>
               <h2 className="text-lg font-semibold text-yellow-700">
-                {authModal.type} Authorization Required
+                {authModal.type === 'entered' ? 'Entered' : 'Cleared'} Authorization Required
               </h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1207,69 +1199,6 @@ export default function DeferralsForm() {
                 ) : (
                   'Auth'
                 )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {historyModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center items-start pt-20 sm:pt-16 z-50 overflow-y-auto h-screen">
-          <div
-            className="bg-white rounded-lg p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-lg border-t-4 border-yellow-500"
-            style={{ marginTop: '100px', marginBottom: '50px', marginLeft: '20px', marginRight: '20px' }}
-          >
-            <h2 className="text-xl font-semibold mb-4">History</h2>
-            {tempHistory.length === 0 ? (
-              <p className="text-sm text-gray-600 mb-4">No history items available.</p>
-            ) : (
-              tempHistory.map((item, histIndex) => (
-                <div key={histIndex} className="mb-4 border-b pb-4">
-                  <h3 className="text-md font-semibold text-gray-700 mb-2">{histIndex + 1}.</h3>
-                  <div className="flex flex-col mb-2">
-                    <label className="text-sm font-medium text-gray-600 mb-1">Raised</label>
-                    <input
-                      type="text"
-                      value={item.raised}
-                      onChange={(e) => updateHistoryItem(histIndex, 'raised', e.target.value)}
-                      className="border border-gray-300 rounded px-3 py-2"
-                    />
-                  </div>
-                  <div className="flex flex-col mb-2">
-                    <label className="text-sm font-medium text-gray-600 mb-1">Worked</label>
-                    <textarea
-                      value={item.worked}
-                      onChange={(e) => updateHistoryItem(histIndex, 'worked', e.target.value)}
-                      className="border border-gray-300 rounded px-3 py-2 h-24"
-                    />
-                  </div>
-                  <button
-                    onClick={() => removeHistoryItem(histIndex)}
-                    className="bg-red-600 text-white px-3 py-1 rounded text-sm"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))
-            )}
-            <button
-              onClick={addNewHistoryItem}
-              className="bg-[#004051] text-white px-4 py-1 rounded mb-4"
-            >
-              + Add New Raised
-            </button>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setHistoryModal(null)}
-                className="bg-gray-300 text-gray-800 px-4 py-1 rounded"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveHistory}
-                className="bg-[#06b6d4] text-white px-4 py-1 rounded"
-              >
-                Save
               </button>
             </div>
           </div>
