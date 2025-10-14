@@ -69,11 +69,11 @@ const fetchLatestTypeNo = async (): Promise<string> => {
     if (!res.ok) throw new Error('Failed to fetch deferrals');
     const deferrals = await res.json();
     const latestDeferral = deferrals
-      .filter((d: any) => d.entries[0]?.defect_reference?.type_no)
+      .filter((d: any) => d?.ddNo)
       .sort((a: any, b: any) =>
-        b.entries[0].defect_reference.type_no.localeCompare(a.entries[0].defect_reference.type_no)
+        b.ddNo.localeCompare(a.ddNo)
       )[0];
-    return latestDeferral?.entries[0]?.defect_reference?.type_no || 'DEF-00000';
+    return latestDeferral?.ddNo || 'DEF-00000';
   } catch (error) {
     console.error('❌ Error fetching deferrals:', error);
     return 'DEF-00000';
@@ -86,7 +86,7 @@ const fetchDeferrals = async () => {
     const res = await fetch(`${API_BASE}/deferrals`);
     if (!res.ok) throw new Error('Failed to fetch deferrals');
     const deferrals = await res.json();
-    return deferrals.filter((d: any) => d.entries[0]?.defect_reference?.type_no);
+    return deferrals.filter((d: any) => d?.ddNo);
   } catch (error) {
     console.error('❌ Error fetching deferrals:', error);
     return [];
@@ -121,6 +121,7 @@ const displayMelCat = (cat: string): string => {
 
 // Save or update a single log item
 const saveLogItem = async (logId: string, entry: LogEntry, index: number) => {
+  console.log('saveLogItem entry:', entry)
   if (!logId) {
     alert('No log selected. Please select a log first.');
     return null;
@@ -151,10 +152,10 @@ const saveLogItem = async (logId: string, entry: LogEntry, index: number) => {
     },
     createdBy: 'user-id',
   };
-
-  const method = entry.updated_id ? 'PUT' : 'POST';
-  const url = entry.updated_id ? `${API_BASE}/logs/${logId}/items/${entry.updated_id}` : `${API_BASE}/logs/${logId}/items`;
-
+  console.log('🔍 Sending payload to API:', JSON.stringify(payload, null, 2));
+  const method = 'POST';
+  const url = `${API_BASE}/logs/${logId}/items`;
+  
   try {
     const response = await fetch(url, {
       method,
@@ -220,6 +221,7 @@ export default function LogSection({
         setFetchingDdIndices((prev) => [...prev, index]);
         try {
           const latestTypeNo = await fetchLatestTypeNo();
+          console.log(latestTypeNo,"latestTypeNo")
           const nextTypeNo = incrementTypeNo(latestTypeNo);
           updatedEntries[index].ddNo = nextTypeNo;
         } catch (error) {
@@ -430,7 +432,7 @@ export default function LogSection({
           ) : (
             <>
               {logEntries.map((entry, index) => {
-                const isFullyAuthorized = entry.shortSignAuthId && entry.actionAuthId;
+                const isFullyAuthorized = !!entry.shortSignAuthId && !!entry.actionAuthId;
                 const isFetchingDd = fetchingDdIndices.includes(index);
                 const isDdActionRaised = entry.ddAction === 'Raised (R)';
                 const isDdActionWorkedOrCleared = ['Worked (W)', 'Cleared (C)'].includes(entry.ddAction);
@@ -452,9 +454,16 @@ export default function LogSection({
                                 <label className="text-sm font-medium text-gray-700 w-[60px] min-w-[60px]">CLASS:</label>
                                 <div className="flex flex-col w-full sm:w-[350px] max-w-[350px]">
                                   <select
-                                    className={`border ${entry.class && !/^(L|P|LI)$/i.test(entry.class) ? 'border-red-500' : 'border-gray-300'} rounded px-3 py-2 text-base focus:ring-2 focus:ring-[#004051]`}
+                                    className={`border ${
+                                      isFullyAuthorized ? 'bg-[#E0F7FA]' : 'bg-gray-50'
+                                    } ${
+                                      entry.class && !/^(L|P|LI)$/i.test(entry.class)
+                                        ? 'border-red-500'
+                                        : 'border-gray-300'
+                                    } rounded px-3 py-2 text-base focus:ring-2 focus:ring-[#004051]`}
                                     value={entry.class}
                                     onChange={(e) => handleLogInputChange(index, 'class', e.target.value)}
+                                    disabled={isFullyAuthorized} // Disable when fully authorized
                                   >
                                     <option value="">Select Class</option>
                                     <option value="L">Line-based (L)</option>
@@ -478,6 +487,7 @@ export default function LogSection({
                                   placeholder="Auth ID / (Staff ID)"
                                   value={entry.raisedBy}
                                   onChange={(e) => handleLogInputChange(index, 'raisedBy', e.target.value)}
+                                  disabled={isFullyAuthorized} // Disable when fully authorized
                                 />
                                 {!entry.raisedBy && showError && (
                                   <span className="text-red-500 text-xs mt-1">Raised by is required</span>
@@ -499,6 +509,7 @@ export default function LogSection({
                             e.target.style.height = 'auto';
                             e.target.style.height = `${e.target.scrollHeight}px`;
                           }}
+                          disabled={isFullyAuthorized} // Disable when fully authorized
                         />
                       </div>
                     </div>
@@ -513,6 +524,7 @@ export default function LogSection({
                               className="w-full border border-gray-300 rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051]"
                               value={entry.ata}
                               onChange={(e) => handleLogInputChange(index, 'ata', e.target.value)}
+                              disabled={isFullyAuthorized} // Disable when fully authorized
                             />
                           </div>
                         </div>
@@ -525,6 +537,7 @@ export default function LogSection({
                               className="w-full border border-gray-300 rounded px-4 py-2 text-base focus:ring-2 focus:ring-[#004051]"
                               value={entry.mmsgFc}
                               onChange={(e) => handleLogInputChange(index, 'mmsgFc', e.target.value)}
+                              disabled={isFullyAuthorized} // Disable when fully authorized
                             />
                           </div>
                         </div>
@@ -535,6 +548,7 @@ export default function LogSection({
                               className="h-5 w-5 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
                               checked={entry.sdr}
                               onChange={(e) => handleLogInputChange(index, 'sdr', e.target.checked)}
+                              disabled={isFullyAuthorized} // Disable when fully authorized
                             />
                             <label className="text-sm font-medium text-gray-600">SDR</label>
                           </div>
@@ -544,6 +558,7 @@ export default function LogSection({
                               checked={entry.ddChecked}
                               onChange={(e) => handleLogInputChange(index, 'ddChecked', e.target.checked)}
                               className="h-5 w-5 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
+                              disabled={isFullyAuthorized} // Disable when fully authorized
                             />
                             <label className="text-sm font-medium text-gray-600">DD</label>
                           </div>
@@ -553,6 +568,7 @@ export default function LogSection({
                               checked={entry.indInspChecked}
                               onChange={(e) => handleLogInputChange(index, 'indInspChecked', e.target.checked)}
                               className="h-5 w-5 border border-gray-300 rounded focus:ring-2 focus:ring-[#004051]"
+                              disabled={isFullyAuthorized} // Disable when fully authorized
                             />
                             <label className="text-sm font-medium text-gray-600">IND INSP</label>
                           </div>
@@ -579,6 +595,7 @@ export default function LogSection({
                               setDescriptionErrors(updatedErrors);
                             }
                           }}
+                          disabled={isFullyAuthorized} // Disable when fully authorized
                         />
                         {descriptionErrors[index] && (
                           <p className="text-red-600 text-sm mt-1">{descriptionErrors[index]}</p>
@@ -601,7 +618,7 @@ export default function LogSection({
                               type="button"
                               className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm ${isFullyAuthorized || (isAuthorizing?.index === index && isAuthorizing?.type === 'Short Sign Auth') ? 'opacity-50 cursor-not-allowed' : ''} min-w-[120px] flex items-center justify-center`}
                               onClick={() => handleAuthClick('Short Sign Auth', index)}
-                              disabled={isAuthorizing?.index === index && isAuthorizing?.type === 'Short Sign Auth'}
+                              disabled={isFullyAuthorized || (isAuthorizing?.index === index && isAuthorizing?.type === 'Short Sign Auth')} // Disable button when fully authorized
                             >
                               {isAuthorizing?.index === index && isAuthorizing?.type === 'Short Sign Auth' ? (
                                 <>
@@ -630,7 +647,7 @@ export default function LogSection({
                               type="button"
                               className={`bg-[#004051] text-white px-4 py-2 rounded-md text-sm min-w-[120px] flex items-center justify-center`}
                               onClick={() => handleAuthClick('Action Auth', index)}
-                              disabled={isAuthorizing?.index === index && isAuthorizing?.type === 'Action Auth'}
+                              disabled={isFullyAuthorized || (isAuthorizing?.index === index && isAuthorizing?.type === 'Action Auth')} // Disable button when fully authorized
                             >
                               {isAuthorizing?.index === index && isAuthorizing?.type === 'Action Auth' ? (
                                 <>
@@ -694,7 +711,7 @@ export default function LogSection({
                             type: isDdActionRaised ? 'text' : isDdActionWorkedOrCleared ? 'select' : 'text',
                             name: 'ddNo',
                             value: entry.ddNo,
-                            options: isDdActionWorkedOrCleared ? deferrals.map((d) => d.entries[0]?.defect_reference?.type_no || '') : [],
+                            options: isDdActionWorkedOrCleared ? deferrals.map((d) => d?.ddNo || '') : [],
                             pattern: /^[A-Za-z0-9\-]+$/,
                             error: 'Invalid format',
                             placeholder: isDdActionWorkedOrCleared ? 'Select deferral...' : 'Type here...',
@@ -738,6 +755,7 @@ export default function LogSection({
                                     e.target.value
                                   )
                                 }
+                                disabled={isFullyAuthorized} // Disable when fully authorized
                               >
                                 <option value="">{field.placeholder || `Choose ${field.label}`}</option>
                                 {field.options?.map((opt) => (
@@ -764,6 +782,7 @@ export default function LogSection({
                                       e.target.value
                                     )
                                   }
+                                  disabled={isFullyAuthorized} // Disable when fully authorized
                                 />
                                 {field.name === 'ddNo' && isFetchingDd && (
                                   <div className="absolute right-2 top-2 animate-spin h-4 w-4 text-gray-500">
@@ -825,6 +844,7 @@ export default function LogSection({
                                     placeholder="Type here..."
                                     value={row.partNo}
                                     onChange={(e) => handleComponentRowChange(index, rowIndex, 'partNo', e.target.value)}
+                                    disabled={isFullyAuthorized} // Disable when fully authorized
                                   />
                                 </td>
                                 <td className="p-2 border border-gray-300">
@@ -834,6 +854,7 @@ export default function LogSection({
                                     placeholder="Type here..."
                                     value={row.serialOn}
                                     onChange={(e) => handleComponentRowChange(index, rowIndex, 'serialOn', e.target.value)}
+                                    disabled={isFullyAuthorized} // Disable when fully authorized
                                   />
                                 </td>
                                 <td className="p-2 border border-gray-300">
@@ -843,6 +864,7 @@ export default function LogSection({
                                     placeholder="Type here..."
                                     value={row.partOff}
                                     onChange={(e) => handleComponentRowChange(index, rowIndex, 'partOff', e.target.value)}
+                                    disabled={isFullyAuthorized} // Disable when fully authorized
                                   />
                                 </td>
                                 <td className="p-2 border border-gray-300">
@@ -852,6 +874,7 @@ export default function LogSection({
                                     placeholder="Type here..."
                                     value={row.serialOff}
                                     onChange={(e) => handleComponentRowChange(index, rowIndex, 'serialOff', e.target.value)}
+                                    disabled={isFullyAuthorized} // Disable when fully authorized
                                   />
                                 </td>
                                 <td className="p-2 border border-gray-300">
@@ -861,6 +884,7 @@ export default function LogSection({
                                     placeholder="Type here..."
                                     value={row.grn}
                                     onChange={(e) => handleComponentRowChange(index, rowIndex, 'grn', e.target.value)}
+                                    disabled={isFullyAuthorized} // Disable when fully authorized
                                   />
                                 </td>
                                 <td className="p-2 border border-gray-300 text-center">
@@ -868,6 +892,7 @@ export default function LogSection({
                                     type="button"
                                     onClick={() => removeComponentRow(index, rowIndex)}
                                     className="bg-red-600 text-white px-3 py-1 text-xs rounded-md hover:bg-red-700"
+                                    disabled={isFullyAuthorized} // Disable when fully authorized
                                   >
                                     Remove
                                   </button>
@@ -882,20 +907,12 @@ export default function LogSection({
                           onClick={() => addComponentRow(index)}
                           type="button"
                           className="bg-[#004051] w-30 text-white text-sm font-medium py-2 px-3 mr-2 rounded shadow transition hover:bg-[#00363f]"
+                          disabled={isFullyAuthorized} // Disable when fully authorized
                         >
                           + Add New
                         </button>
                       </div>
                     </div>
-                    {/* <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => removeLogEntry(index)}
-                        className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700"
-                      >
-                        Remove Log Entry
-                      </button>
-                    </div>  */}
                   </div>
                 );
               })}

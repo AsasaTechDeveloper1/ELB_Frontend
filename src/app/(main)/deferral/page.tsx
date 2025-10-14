@@ -114,11 +114,11 @@ const fetchLatestTypeNo = async (): Promise<string> => {
     const deferrals = await res.json();
     if (!deferrals || deferrals.length === 0) return 'DEF-00000';
     const latestDeferral = deferrals
-      .filter((d: any) => d.entries?.[0]?.defect_reference?.type_no)
+      .filter((d: any) => d.ddNo)
       .sort((a: any, b: any) =>
-        b.entries[0].defect_reference.type_no.localeCompare(a.entries[0].defect_reference.type_no)
+        b.ddNo.localeCompare(a.ddNo)
       )[0];
-    return latestDeferral?.entries[0]?.defect_reference?.type_no || 'DEF-00000';
+    return latestDeferral?.ddNo || 'DEF-00000';
   } catch (error) {
     console.error('❌ Error fetching deferrals:', error);
     return 'DEF-00000';
@@ -234,6 +234,7 @@ export default function DeferralsForm() {
       });
       const data = await res.json();
       if (res.ok) {
+        console.log("fetched deferrals : ", data)
         const fetchedEntries = data
           .filter((item: any) => item.entries?.[0])
           .map((item: any, index: number) => ({
@@ -242,7 +243,7 @@ export default function DeferralsForm() {
             groupNo: index + 1,
             defect_reference: {
               dd: normalizeDdType(item.entries[0].defect_reference?.dd || ''),
-              type_no: item.entries[0].defect_reference?.type_no || 'DEF-00001',
+              type_no: item.ddNo || 'DEF-00001',
               log_page: item.entries[0].defect_reference?.log_page || null,
               log_item_no: item.entries[0].defect_reference?.log_item_no || null,
               mel_cd_ref: item.entries[0].defect_reference?.mel_cd_ref || null,
@@ -272,7 +273,7 @@ export default function DeferralsForm() {
         setAuthorizedEntries(fetchedEntries.map((_: DeferralEntry, idx: number) => idx).filter((idx: number) => fetchedEntries[idx].enteredAuth));
         setClearedEntries(fetchedEntries.map((_: DeferralEntry, idx: number) => idx).filter((idx: number) => fetchedEntries[idx].clearedAuth));
         const typeNos = data
-          .map((item: any) => item.entries[0]?.defect_reference?.type_no)
+          .map((item: any) => item.ddNo)
           .filter((typeNo: string | null): typeNo is string => typeNo !== null);
         setNextTypeNo(generateNextTypeNo(typeNos));
       } else {
@@ -565,7 +566,10 @@ export default function DeferralsForm() {
 
       const payload = {
         entries: [{
-          defect_reference: updatedEntry.defect_reference,
+          defect_reference: {
+            ...updatedEntry.defect_reference,
+            type_no: updatedEntry.defect_reference.type_no,
+          },
           description: updatedEntry.description,
           clear_reference: updatedEntry.clear_reference,
           enteredSign: updatedEntry.enteredSign,
@@ -630,7 +634,10 @@ export default function DeferralsForm() {
       for (const entry of entries) {
         const payload = {
           entries: [{
-            defect_reference: entry.defect_reference,
+            defect_reference: {
+              ...entry.defect_reference,
+              type_no: entry.defect_reference.type_no,
+            },
             description: entry.description,
             clear_reference: entry.clear_reference,
             enteredSign: entry.enteredSign,
