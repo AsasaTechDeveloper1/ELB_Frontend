@@ -501,12 +501,6 @@ export default function FormElementsPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
                       </svg>
                     </button>
-                    <button
-                      className="bg-[#004051] flex items-center gap-2 text-white font-semibold px-5 py-1 rounded-lg shadow-md hover:bg-[#003340] transition-all duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                      onClick={addNewLogEntry}
-                    >
-                      + Add Entry
-                    </button>
                   </div>
                 </div>
                 <div className="flex items-center justify-start gap-6 text-sm font-medium text-gray-700 uppercase tracking-tight">
@@ -551,6 +545,20 @@ export default function FormElementsPage() {
               setAuthModal={setAuthModal}
               setCheckedItems={setCheckedItems}
             />
+            {/* <button
+              className="bg-[#004051] flex items-center gap-2 text-white font-semibold px-5 py-1 rounded-lg shadow-md hover:bg-[#003340] transition-all duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={addNewLogEntry}
+            >
+              + Add Entry
+            </button>  */}
+            <div className="flex justify-end">
+              <button
+                className="inline-flex items-center gap-2 bg-[#004051] text-white font-semibold px-5 py-2 rounded-lg shadow-md hover:bg-[#003340] transition-all duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+                onClick={addNewLogEntry}
+              >
+                + Add Entry
+              </button>
+            </div>
           </div>
         </div>
       </div>
