@@ -942,7 +942,9 @@ export default function DeferralsForm() {
                                     .map((h) => (
                                       <div key={h.id} className="mb-3 border-b pb-2 last:border-b-0">
                                         <p className="text-sm font-medium text-gray-700">
-                                          <strong>{h.action}</strong> on {formatDate(h.createdAt)} by {h.createdBy || 'Unknown'}
+                                          {/* <strong>{h.action}</strong> on  */}
+                                          {formatDate(h.createdAt)} 
+                                          {/* by {h.createdBy || 'Unknown'} */}
                                         </p>
                                         <p className="text-sm text-gray-600 mt-1">Details: {h.description || 'No details'}</p>
                                       </div>
@@ -985,7 +987,7 @@ export default function DeferralsForm() {
                                   {logs.map((log) => (
                                     <option key={log.id} value={log.logPageNo}>
                                       {log.logPageNo}
-                                    </option>
+                                    </option> 
                                   ))}
                                 </select>
                               </div>
@@ -1053,7 +1055,7 @@ export default function DeferralsForm() {
                                 'Copy'
                               )}
                             </button>
-                            <button
+                            {/* <button
                               onClick={() => removeEntry(index)}
                               className="bg-red-600 text-white px-4 py-1 text-sm rounded-md font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2"
                               disabled={actionLoading[index]?.remove}
@@ -1069,7 +1071,7 @@ export default function DeferralsForm() {
                               ) : (
                                 'Remove'
                               )}
-                            </button>
+                            </button> */}
                           </div>
                         </div>
                       </td>

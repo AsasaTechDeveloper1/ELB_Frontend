@@ -98,7 +98,6 @@ export default function FormElementsPage() {
     date: '',
     expDate: '',
   });
-  const getCurrentFlightIndex = () => logs.findIndex(l => l.flightDetails?.currentFlight === true);
   const [descriptionErrors, setDescriptionErrors] = useState<string[]>([]);
   const [showError, setShowError] = useState(false);
   const [showLogListModal, setShowLogListModal] = useState(false);
@@ -301,19 +300,12 @@ export default function FormElementsPage() {
   }
 
   const handleNextLog = () => {
-    const currentIdx = getCurrentFlightIndex();
-    
-    // If no current flight, or already at the end, do nothing
-    if (currentIdx === -1 || selectedLogIndex >= logs.length - 1) return;
-
-    const nextIdx = selectedLogIndex + 1;
-
-    // Allow moving forward ONLY if next index <= current flight index
-    if (nextIdx <= currentIdx) {
-      setSelectedLogIndex(nextIdx);
-      setLogPageNo(logs[nextIdx].logPageNo);
-      fetchLogItems(logs[nextIdx].id);
-      fetchChecks(logs[nextIdx].id);
+    if (selectedLogIndex < logs.length - 1) {
+      const nextIndex = selectedLogIndex + 1;
+      setSelectedLogIndex(nextIndex);
+      setLogPageNo(logs[nextIndex].logPageNo);
+      fetchLogItems(logs[nextIndex].id);
+      fetchChecks(logs[nextIndex].id);
     }
   };
 
@@ -514,11 +506,11 @@ export default function FormElementsPage() {
                       Previous
                     </button>
                     <button
-                        onClick={handleNextLog}
-                        disabled={selectedLogIndex === getCurrentFlightIndex() || selectedLogIndex === logs.length - 1}
-                        className="bg-[#06b6d4] flex items-center gap-2 text-white font-semibold px-5 py-1 rounded-lg shadow-md hover:bg-[#003340] transition-all duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Next
+                      onClick={handleNextLog}
+                      disabled={selectedLogIndex === logs.length - 1}
+                      className="bg-[#06b6d4] flex items-center gap-2 text-white font-semibold px-5 py-1 rounded-lg shadow-md hover:bg-[#003340] transition-all duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
                       </svg>

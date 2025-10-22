@@ -110,9 +110,9 @@ export function Header() {
               <div className="flex flex-col items-center justify-center px-4 border-b border-gray-300 md:border-b-0 md:border-r">
                 <span className="text-xs text-gray-300 uppercase">
                   Aircraft / Type
-                </span>
+                </span> 
                 <span className="text-sm font-semibold text-white">
-                  {flightData.regn} / {flightData.typeOfFlight}
+                  {defaultFlightData.regn} / {flightData.typeOfFlight}
                 </span>
               </div>
 

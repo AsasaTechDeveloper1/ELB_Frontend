@@ -28,20 +28,20 @@ export default function SignIn() {
               </Link> */}
               <Image 
                   className="hidden dark:block mx-auto mb-4"
-                  src={"/images/logo/Picture1.png"}
-                  width={176}
-                  height={32}
+                  src={"/images/logo/airplane.png"}
+                  width={476}
+                  height={320}
                   alt="ELB Logo"
                   role="presentation"
                   quality={100}
                 />
                 <Image
                   className="dark:hidden mx-auto mb-4"
-                  src={"/images/logo/Picture1.png"}
+                  src={"/images/logo/airplane.png"}
                   alt="ELB Logo"
-                  width={176}
-                  height={32}
-                  style={{ width: '125px' }}
+                  width={476}
+                  height={320}
+                  style={{ width: '476px' }}
                 />
               <p className="mb-3 text-xl font-medium text-dark dark:text-white">
                 Sign in to your account
