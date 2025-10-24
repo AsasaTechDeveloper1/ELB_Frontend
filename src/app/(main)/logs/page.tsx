@@ -106,6 +106,15 @@ export default function FormElementsPage() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [airports, setAirports] = useState<Airport[]>([]);
 
+  // Add the missing variables and function here:
+  const currentLogId = logs[selectedLogIndex]?.id || '';
+  const flightLeg = logs[selectedLogIndex]?.flightLeg || 0;
+
+  const handleFluidsSaved = async () => {
+    console.log('Fluids data saved successfully');
+    // Optional: Add any post-save logic here
+  };
+  
   // Fetch airports
   useEffect(() => {
     async function fetchAirports() {
@@ -302,7 +311,7 @@ export default function FormElementsPage() {
 
   const handleNextLog = () => {
     const currentIdx = getCurrentFlightIndex();
-    
+      
     // If no current flight, or already at the end, do nothing
     if (currentIdx === -1 || selectedLogIndex >= logs.length - 1) return;
 
@@ -391,7 +400,14 @@ export default function FormElementsPage() {
     {
       id: 'Fluids',
       label: 'Fluids',
-      content: <FluidsSection />,
+      content: <FluidsSection
+        openAuthModal={openAuthModal}
+        authDetails={authDetails}
+        setAuthDetails={setAuthDetails}
+        currentLogId={currentLogId}
+        flightLeg={flightLeg}
+        onFluidsSaved={handleFluidsSaved}
+      />,
     },
     {
       id: 'Checks',

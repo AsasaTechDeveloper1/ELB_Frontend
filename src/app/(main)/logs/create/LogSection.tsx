@@ -246,8 +246,8 @@ export default function LogSection({
           updatedEntries[index].melCdlRef = deferralData.mel_cd_ref || '';
           updatedEntries[index].cat = displayMelCat(deferralData.mel_cat || '');
         } else {
-          updatedErrors[index] = 'Selected deferral not found';
-          setDeferralErrors(updatedErrors);
+          // updatedErrors[index] = 'Selected deferral not found';
+          // setDeferralErrors(updatedErrors);
           updatedEntries[index].ddType = '';
           updatedEntries[index].melCdlRef = '';
           updatedEntries[index].cat = 'Cat A';

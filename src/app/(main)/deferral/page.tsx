@@ -15,7 +15,7 @@ interface DeferralEntry {
     log_item_no: string | null;
     mel_cd_ref: string | null;
     mel_cat: string | null;
-    date: string | null;
+    date: string | null; 
     dd_action?: string | null;
   };
   description: string;
